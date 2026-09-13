@@ -37,50 +37,73 @@ So this engine has nothing to read. Options, in the order I would pick them:
 I recommend doing both: define `BarSource` so the engine never imports storage
 code directly, and build the bars slice of the data layer in parallel.
 
-### 0.2 The calibration test as specified cannot pass, and cannot fail either
+### 0.2 Calibration test — measured redesign
 
-This is the important one. The test asks for RandomStrategy expectancy of
--0.45 per trade over 2+ years, within 15%, so a tolerance band of ±0.0675.
+All numbers below are measured from the June 2024 ticks on disk: 4,639,089
+ticks, 1,838 M15 bars, 200,000 simulated random trades with time-based exits at
+4-12 hours and forced exit before rollover.
 
-I measured the actual dispersion from our own June 2024 ticks: 4,639,089 ticks,
-1,838 M15 bars, mean bar range 2.796 USD, mean spread 0.3908 USD.
+**Per-trade dispersion and required sample size.** Detecting a 20% error in a
+0.45 expectancy means resolving delta = 0.09.
 
-Forward price move at the holding horizons:
+| Quantity | Value |
+|---|---|
+| Per-trade P&L sigma (unpaired) | 12.0358 |
+| Trades for 95% CI half-width <= 0.09 | 68,700 |
+| Trades for 95% confidence and 80% power | 140,369 |
+| M15 bars in 3 years at 5 days/week | 75,086 |
+| Pooled seeds needed | 2 |
 
-| Horizon | Move std dev | Trades needed for ±0.0675 at 95% | Trades available in 2 years |
-|---|---|---|---|
-| 4h | 8.852 | 66,066 | 2,860 |
-| 8h | 13.661 | 157,349 | 1,430 |
-| 12h | 17.328 | 253,157 | 953 |
+**Pooling is statistically valid, and this was checked rather than assumed.**
+Trades drawn from one price history overlap in time, but a random entry sign
+makes their P&Ls uncorrelated: cov(d_i x_i, d_j x_j) = E[d_i d_j] E[x_i x_j] = 0
+for independent balanced signs. Empirically, over 200 seeds of 5,000 trades,
+the bootstrap standard error was 0.16696 against a naive sigma/sqrt(n) of
+0.17021, a ratio of 0.981. Pooling across seeds is therefore legitimate.
 
-At an 8 hour hold the shortfall is a factor of 110. With 1,430 trades the
-standard error is 0.361, so the 95% interval on a correct engine is roughly
--0.45 ± 0.71. A **completely broken engine charging zero costs**, whose true
-expectancy is 0.00, sits comfortably inside that interval. The test would pass a
-broken engine most of the time and fail a correct one often. It measures market
-noise, not cost.
+**The paired differential is 117x tighter.** Running the same seed with costs on
+and costs off gives identical paths, entries and exits, so the per-trade
+difference is the cost itself.
 
-**Proposed fix: make it a paired differential test.** Run RandomStrategy twice
-with the identical seed, once with costs enabled and once with all costs zeroed.
-The price paths, entry times and exit times are identical, so the per-trade
-difference in P&L *is* the cost, and market noise cancels exactly rather than
-statistically.
+| Quantity | Unpaired | Paired |
+|---|---|---|
+| Sigma | 12.0358 | 0.1030 |
+| Trades for CI half-width <= 0.09 | 68,700 | 5 |
+| Trades for 80% power | 140,369 | 10 |
 
-```
-expectancy(costs_on) - expectancy(costs_off)  ==  -(spread + slippage)
-```
+**-0.45 is not a constant, and the test must not hardcode it.** The paired
+measurement came out at -0.4987, and its 95% interval of [-0.5007, -0.4953]
+excludes -0.45. That is the test working, not failing. Cost depends on which
+bars trades actually fill in:
 
-The residual dispersion is only the bar-to-bar variation in spread itself, which
-I measured at 0.0315 USD. That needs a handful of trades for a tight bound, not
-157,000. The test becomes sharp, fast, and genuinely diagnostic: zero out the
-cost model and it fails immediately and loudly, which is exactly the property
-you asked for.
+| Spread measure | Value |
+|---|---|
+| Mean over all bars | 0.3939 |
+| Mean at realised entry bars | 0.3941 |
+| Mean at realised exit bars | 0.4834 |
+| Expected cost from realised fills | 0.4987 |
+| Naive mean spread plus slippage | 0.4539 |
 
-Pairing is exact only when exits are time-based, because a cost-shifted fill can
-change whether a stop triggers. The calibration fixture should therefore use
-time-based exits. I would keep a second, looser absolute check on real data
-(expectancy negative, and within a wide band) as a smoke test, clearly labelled
-as low power so nobody reads it as proof.
+Forced exit concentrates exits into the wide bars adjacent to rollover, and
+27.8% of trades in this crude simulation closed on their entry bar. The
+reference value must therefore be computed per fill as
+mean((spread_entry + spread_exit) / 2 + 2 * slippage), which matched the
+measured difference to four decimal places.
+
+**Proposed test, replacing the fixed band.**
+
+1. Sharp assertion: the paired differential equals the per-fill computed
+   reference, within tolerance.
+2. Precision guard: assert the CI half-width is <= 0.09. This is essential.
+   "The interval contains the target" is vacuous on its own, because a wide
+   enough interval always contains it, so a broken high-variance engine would
+   pass. The precision assertion is what gives the test its power.
+3. Loose sanity band on absolute expectancy, roughly -0.60 to -0.35, to catch
+   gross misconfiguration of the cost model.
+4. The interval, the point estimate, the half-width and the trade count are
+   printed in the report every run, pass or fail.
+5. Confidence intervals by percentile bootstrap over trades, which the
+   independence check above validates.
 
 ### 0.3 Three smaller corrections
 
