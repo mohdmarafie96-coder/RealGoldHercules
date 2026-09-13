@@ -18,6 +18,7 @@ from .storage.paths import bars_partition, ticks_partition
 from .storage.schemas import BARS, TIMEFRAME_SECONDS
 from .timeutils import UTC, month_range
 from .transform.bars import bars_from_table
+from .transform.features import add_cost_features, FEATURES
 from .quality.validate import validate_bars, write_report
 
 
@@ -62,6 +63,36 @@ def cmd_build(cfg: Config, args: argparse.Namespace) -> int:
             print(f"  {y}-{m:02d} {tf:>3}: {bars.num_rows:,} bars "
                   f"from {ticks.num_rows:,} ticks")
     print(f"wrote {total:,} bars across {len(months)} month(s)")
+    return 0
+
+
+def cmd_features(cfg: Config, args: argparse.Namespace) -> int:
+    """Bars -> feature-ready dataset with causal cost and volatility columns."""
+    import pyarrow.dataset as ds
+    base = cfg.bars_dir / f"symbol={cfg.symbol}" / f"timeframe={args.timeframe}"
+    if not base.exists():
+        print(f"no bars for {args.timeframe}; run `build` first", file=sys.stderr)
+        return 1
+    tbl = ds.dataset(base, format="parquet", partitioning="hive").to_table()
+    tbl = tbl.select([f.name for f in BARS]).cast(BARS).sort_by([("ts_open", "ascending")])
+    feats = add_cost_features(tbl, slippage_per_side=args.slippage,
+                              atr_period=args.atr_period)
+    out_base = cfg.data_root / "features" / f"symbol={cfg.symbol}" / f"timeframe={args.timeframe}"
+    months = sorted({(d.year, d.month) for d in feats["ts_open"].to_pylist()})
+    import pyarrow.compute as pcx
+    n = 0
+    for y, m in months:
+        lo = datetime(y, m, 1, tzinfo=UTC)
+        hi = datetime(y + (m == 12), (m % 12) + 1, 1, tzinfo=UTC)
+        mask = pcx.and_(pcx.greater_equal(feats["ts_open"], pa.scalar(lo, type=feats.schema.field("ts_open").type)),
+                        pcx.less(feats["ts_open"], pa.scalar(hi, type=feats.schema.field("ts_open").type)))
+        part = feats.filter(mask)
+        if part.num_rows == 0:
+            continue
+        write_table(part, out_base / f"year={y:04d}" / f"month={m:02d}",
+                    FEATURES, sort_by="ts_open")
+        n += part.num_rows
+    print(f"wrote {n:,} feature rows to {out_base}")
     return 0
 
 
@@ -113,6 +144,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     pb = sub.add_parser("build", help="ticks -> bars")
     pb.set_defaults(fn=cmd_build)
+
+    pf = sub.add_parser("features", help="bars -> feature-ready dataset")
+    pf.add_argument("--timeframe", default="M15")
+    pf.add_argument("--slippage", type=float, default=0.03, help="per side, USD/oz")
+    pf.add_argument("--atr-period", type=int, default=14, dest="atr_period")
+    pf.set_defaults(fn=cmd_features)
 
     pv = sub.add_parser("views", help="create DuckDB views")
     pv.set_defaults(fn=cmd_views)

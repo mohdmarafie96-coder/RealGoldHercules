@@ -53,6 +53,18 @@ def build_views(
             """)
             made.append(name)
 
+        for tf in timeframes:
+            if not has(f"features/**/timeframe={tf}/**/*.parquet"):
+                continue
+            name = f"features_{tf.lower()}"
+            con.execute(f"""
+                CREATE OR REPLACE VIEW {name} AS
+                SELECT * FROM read_parquet(
+                    '{data_root}/features/symbol=*/timeframe={tf}/**/*.parquet',
+                    hive_partitioning := true)
+            """)
+            made.append(name)
+
         if has("context/**/*.parquet"):
             con.execute(f"""
                 CREATE OR REPLACE VIEW context AS
