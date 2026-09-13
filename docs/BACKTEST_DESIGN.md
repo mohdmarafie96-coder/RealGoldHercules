@@ -143,50 +143,72 @@ tests/
 
 ---
 
-## 2. The lookahead barrier
+## 2. The lookahead barrier — CORRECTED
 
-This is the constraint you called most important, so it gets the most specific
-design.
+The first draft of this section was wrong and has been replaced. It proposed a
+`BarWindow` holding `_cols`, the full column arrays, plus an `_end` index with
+bounds checks. That is the full dataframe plus an index wearing a seatbelt: any
+strategy could read `window._cols` and see the whole future. Bounds checking is
+not the same as unreachability.
 
-`BarWindow` holds a reference to immutable column arrays plus an integer `end`.
-Construction is O(1); nothing is copied per bar. Underlying numpy arrays are set
-non-writeable, and every accessor bounds-checks against `end`.
+**Corrected design: an append-only revealed buffer.** `BarHistory` is owned by
+the engine and grows by exactly one row per bar. `BarWindow` is handed numpy
+slice views truncated to the revealed length. Future rows are not present in
+any object the strategy can reach, because they have not been written yet.
+
+Properties, each covered by a test in `tests/test_window.py`:
+
+- Views are truncated to `n`, so out-of-range indexing has nothing to address.
+  `BarWindow.__init__` rejects any column whose length is not exactly `n`.
+- Positive index at or beyond the next bar raises `LookaheadError`.
+- Slice bounds are checked *before* Python clamps them, so `w[0:n+1]` raises
+  rather than quietly returning `n` rows.
+- Returned arrays are non-writeable, so history cannot be rewritten.
+- Capacity beyond the revealed length is zero-filled and never receives future
+  values, so reaching through `ndarray.base` yields zeros, not data.
+- `window._cols` remains reachable, because Python has no real privacy, but it
+  holds only truncated views. A reachability audit test walks every data
+  container reachable from the window and asserts no value from an unrevealed
+  bar appears in any of them.
+
+Measured: 75,000 bars, roughly three years of M15, append plus window
+construction in 1.075 seconds, 14.3 microseconds per bar. Construction is O(1)
+and shares memory with the buffer, verified by `np.shares_memory`.
+
+### 2.1 The signature
 
 ```python
-class BarWindow:
-    __slots__ = ("_cols", "_end")
+class Strategy(ABC):
+    @abstractmethod
+    def on_bar(
+        self,
+        window: BarWindow,
+        portfolio: PortfolioView,
+    ) -> Sequence[Order]:
+        """Called once per bar.
 
-    @property
-    def index(self) -> int: ...          # absolute index of the current bar
-    def __len__(self) -> int: ...        # end + 1
-
-    def value(self, col: str, lag: int = 0) -> float:
-        """lag=0 is the current bar, lag=1 the previous. Negative lag raises."""
-
-    def series(self, col: str, n: int) -> npt.NDArray[np.float64]:
-        """Read-only view of the last n values ending at the current bar."""
-
-    def __getitem__(self, idx: int | slice) -> BarView | BarSlice:
-        """Absolute indexing. Any index or slice stop beyond `end` raises
-        LookaheadError. Slices are NOT clamped: silent success is the failure
-        mode we are preventing."""
+        ``window`` covers bars 0..window.index inclusive, where window.index is
+        the bar that just closed. There is no argument carrying future data and
+        no reachable reference to it.
+        """
 ```
 
-Three rules that make this hold:
+### 2.2 Construction in the event loop
 
-- Positive index greater than `end` raises `LookaheadError`, never clamps.
-- A slice whose stop exceeds `end + 1` raises, rather than truncating.
-- Arrays handed out are non-writeable views, so a strategy cannot mutate history.
+```python
+def run(source: BarSource, strategy: Strategy, portfolio: PortfolioView) -> None:
+    history = BarHistory()
 
-The strategy never sees the full frame. `on_bar` receives only the window, so
-there is no object in scope that contains the future.
+    for raw in source.iter_bars():
+        history.append(raw)              # 1. reveal exactly one bar
+        window = history.window()        # 2. O(1) truncated read-only views
+        orders = strategy.on_bar(window, portfolio)   # 3. history is never passed
+        ...                              # 4. broker fills against the NEXT bar
+```
 
-Cost note: a naive `df.iloc[:i+1]` copy per bar over three years of M15 is about
-75,000 bars times an average 37,000 rows, roughly 2.8 billion row copies. That
-alone would blow the 60 second budget. The zero-copy window is what makes the
-performance requirement reachable.
-
----
+Ordering is load-bearing. The bar is appended before `on_bar` is called, so the
+strategy sees the bar that just closed and the window can never contain a bar
+the clock has not reached. `history` itself is never handed to the strategy.
 
 ## 3. Interfaces
 
