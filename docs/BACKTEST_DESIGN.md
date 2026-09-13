@@ -1,0 +1,354 @@
+# XAUUSD Backtest Engine — Architecture Proposal
+
+Status: **PROPOSAL — awaiting approval. No implementation code written.**
+
+Two things in the brief need to change before this is buildable. Both are in
+section 0. Everything after that is the proposed design.
+
+---
+
+## 0. Blocking issues
+
+### 0.1 The data layer this engine is supposed to consume does not exist
+
+The brief says "consumes the existing parquet/DuckDB data layer in this repo."
+There is no such layer. The repository contains two files:
+
+```
+README.md
+docs/DESIGN.md
+```
+
+Zero Python files, zero Parquet, zero DuckDB, zero YAML. `docs/DESIGN.md` is the
+schema proposal from the previous task, which was never approved and never
+implemented. The measured cost baseline quoted in the brief is real, but it came
+from decoding raw Dukascopy `.bi5` files in a scratch directory, not from a
+pipeline.
+
+So this engine has nothing to read. Options, in the order I would pick them:
+
+1. Build the minimum slice of the data layer first: bar schema, Parquet writer,
+   tick-to-bar transform, DuckDB view. That is most of `xau_data` deliverables
+   4 and 6 and is a prerequisite either way.
+2. Build the engine against a `BarSource` protocol with a fixture-backed
+   implementation now, and wire the Parquet implementation in when the layer
+   lands. The engine stays honest and testable; only the acceptance runs wait.
+
+I recommend doing both: define `BarSource` so the engine never imports storage
+code directly, and build the bars slice of the data layer in parallel.
+
+### 0.2 The calibration test as specified cannot pass, and cannot fail either
+
+This is the important one. The test asks for RandomStrategy expectancy of
+-0.45 per trade over 2+ years, within 15%, so a tolerance band of ±0.0675.
+
+I measured the actual dispersion from our own June 2024 ticks: 4,639,089 ticks,
+1,838 M15 bars, mean bar range 2.796 USD, mean spread 0.3908 USD.
+
+Forward price move at the holding horizons:
+
+| Horizon | Move std dev | Trades needed for ±0.0675 at 95% | Trades available in 2 years |
+|---|---|---|---|
+| 4h | 8.852 | 66,066 | 2,860 |
+| 8h | 13.661 | 157,349 | 1,430 |
+| 12h | 17.328 | 253,157 | 953 |
+
+At an 8 hour hold the shortfall is a factor of 110. With 1,430 trades the
+standard error is 0.361, so the 95% interval on a correct engine is roughly
+-0.45 ± 0.71. A **completely broken engine charging zero costs**, whose true
+expectancy is 0.00, sits comfortably inside that interval. The test would pass a
+broken engine most of the time and fail a correct one often. It measures market
+noise, not cost.
+
+**Proposed fix: make it a paired differential test.** Run RandomStrategy twice
+with the identical seed, once with costs enabled and once with all costs zeroed.
+The price paths, entry times and exit times are identical, so the per-trade
+difference in P&L *is* the cost, and market noise cancels exactly rather than
+statistically.
+
+```
+expectancy(costs_on) - expectancy(costs_off)  ==  -(spread + slippage)
+```
+
+The residual dispersion is only the bar-to-bar variation in spread itself, which
+I measured at 0.0315 USD. That needs a handful of trades for a tight bound, not
+157,000. The test becomes sharp, fast, and genuinely diagnostic: zero out the
+cost model and it fails immediately and loudly, which is exactly the property
+you asked for.
+
+Pairing is exact only when exits are time-based, because a cost-shifted fill can
+change whether a stop triggers. The calibration fixture should therefore use
+time-based exits. I would keep a second, looser absolute check on real data
+(expectancy negative, and within a wide band) as a smoke test, clearly labelled
+as low power so nobody reads it as proof.
+
+### 0.3 Three smaller corrections
+
+**Rollover is not always 21:00 UTC.** It is 17:00 New York, which is 21:00 UTC
+in summer and **22:00 UTC in winter**. The zero-tick hour we measured was June
+data, hence 21:00. Hardcoding 21:00 would silently hold positions through the
+winter rollover and miss swap charges for five months of the year. The forced
+exit must be computed from the exchange calendar, never from a UTC constant.
+
+**Expectancy units.** "-0.45 per trade" is a price move in USD per ounce. Stated
+in dollars of P&L it scales with position size. The calibration test must pin
+size to one unit, or assert on cost-per-unit rather than P&L.
+
+**Pessimistic intrabar biases the calibration.** Assuming the stop fills first
+whenever stop and target both fall inside one bar adds a systematic negative
+drift on top of cost. Calibration must run in tick mode, or with a fixture where
+same-bar ambiguity cannot occur, or the measured number will be more negative
+than -0.45 for a reason that has nothing to do with costs.
+
+Also worth noting: since the strategy force-exits before rollover, no swap is
+ever charged in a calibration run. The swap test needs its own fixture with
+forced exit disabled.
+
+---
+
+## 1. Module layout
+
+```
+xau_backtest/
+  __init__.py
+  config.py              # YAML -> frozen dataclasses, validated
+  types.py               # Side, OrderType, ExitReason, Money aliases
+  errors.py              # LookaheadError, InsufficientMarginError, ...
+
+  engine/
+    clock.py             # BarClock: iteration, session labels, rollover flags
+    window.py            # BarWindow: zero-copy, lookahead-proof view
+    broker.py            # fills, slippage, swap, margin
+    position.py          # Position, Portfolio, sizing
+    intrabar.py          # stop/target-in-one-bar resolution
+    strategy.py          # Strategy ABC + RandomStrategy, LondonBreakoutStrategy
+    loop.py              # the event loop tying the above together
+
+  data/
+    source.py            # BarSource protocol
+    parquet_source.py    # reads the xau_data bar tables
+    fixture_source.py    # in-memory, for tests and calibration
+
+  reporting/
+    blotter.py           # trade records with reason codes
+    metrics.py           # all the statistics, with session/year breakdowns
+    plots.py             # equity curve, P&L distribution, monthly heatmap
+    report.py            # markdown + JSON output
+
+configs/
+  backtest.yaml          # costs, slippage, sizing, sessions, intrabar mode
+tests/
+  ...
+```
+
+---
+
+## 2. The lookahead barrier
+
+This is the constraint you called most important, so it gets the most specific
+design.
+
+`BarWindow` holds a reference to immutable column arrays plus an integer `end`.
+Construction is O(1); nothing is copied per bar. Underlying numpy arrays are set
+non-writeable, and every accessor bounds-checks against `end`.
+
+```python
+class BarWindow:
+    __slots__ = ("_cols", "_end")
+
+    @property
+    def index(self) -> int: ...          # absolute index of the current bar
+    def __len__(self) -> int: ...        # end + 1
+
+    def value(self, col: str, lag: int = 0) -> float:
+        """lag=0 is the current bar, lag=1 the previous. Negative lag raises."""
+
+    def series(self, col: str, n: int) -> npt.NDArray[np.float64]:
+        """Read-only view of the last n values ending at the current bar."""
+
+    def __getitem__(self, idx: int | slice) -> BarView | BarSlice:
+        """Absolute indexing. Any index or slice stop beyond `end` raises
+        LookaheadError. Slices are NOT clamped: silent success is the failure
+        mode we are preventing."""
+```
+
+Three rules that make this hold:
+
+- Positive index greater than `end` raises `LookaheadError`, never clamps.
+- A slice whose stop exceeds `end + 1` raises, rather than truncating.
+- Arrays handed out are non-writeable views, so a strategy cannot mutate history.
+
+The strategy never sees the full frame. `on_bar` receives only the window, so
+there is no object in scope that contains the future.
+
+Cost note: a naive `df.iloc[:i+1]` copy per bar over three years of M15 is about
+75,000 bars times an average 37,000 rows, roughly 2.8 billion row copies. That
+alone would blow the 60 second budget. The zero-copy window is what makes the
+performance requirement reachable.
+
+---
+
+## 3. Interfaces
+
+### 3.1 Clock and sessions
+
+```python
+@dataclass(frozen=True)
+class BarEvent:
+    index: int
+    ts_open: datetime           # tz-aware UTC
+    ts_end_exclusive: datetime
+    session: Session            # ASIAN | LONDON | OVERLAP | NY | OFF
+    is_rollover: bool           # bar containing 17:00 exchange-local
+    is_last_before_rollover: bool
+```
+
+Sessions are configured as local windows in named timezones and converted per
+bar, so DST is handled by the tz database rather than by UTC arithmetic:
+
+```yaml
+sessions:
+  asian:  { tz: Asia/Tokyo,        start: "09:00", end: "15:00" }
+  london: { tz: Europe/London,     start: "08:00", end: "16:30" }
+  ny:     { tz: America/New_York,  start: "08:00", end: "17:00" }
+  overlap: intersection_of: [london, ny]
+rollover:
+  tz: America/New_York
+  at: "17:00"
+```
+
+### 3.2 Strategy
+
+```python
+class Strategy(ABC):
+    @abstractmethod
+    def on_bar(self, window: BarWindow, portfolio: PortfolioView) -> Sequence[Order]: ...
+    def on_fill(self, fill: Fill) -> None: ...
+    def on_exit(self, trade: Trade) -> None: ...
+```
+
+`PortfolioView` is read-only: open positions, equity, free margin. A strategy
+cannot mutate portfolio state directly; it returns orders and the engine applies
+them.
+
+### 3.3 Broker and cost model
+
+```python
+class Broker:
+    def submit(self, order: Order, bar: BarEvent, quotes: Quotes) -> Fill | Rejection: ...
+    def mark_to_market(self, bar: BarEvent) -> None: ...
+    def charge_swap(self, bar: BarEvent) -> Sequence[SwapCharge]: ...
+```
+
+Fill rules:
+
+- Buy fills at `ask`, sell fills at `bid`, with no exception anywhere.
+- Slippage is `fixed + k * volatility`, where volatility is a per-bar measure
+  from the window (ATR or realised range), both terms from config.
+- Spread is read per bar from the bar's own spread columns. There is no default
+  spread constant in the codebase; a missing spread column is an error.
+
+Stop trigger side matters and is easy to get wrong: a long position's stop and
+target are evaluated against the **bid** series, because that is the side you
+exit on. A short's are evaluated against the **ask**. Triggering on mid and
+filling on bid/ask double-counts or under-counts half a spread.
+
+Gap-through: if the bar opens beyond the stop, the fill is at the gapped open
+price plus slippage, always worse than the stop, never at it.
+
+Swap: charged once per open position per rollover bar crossed, with separate
+long and short rates from config. Idempotency is enforced by recording the
+rollover date on the position, so a re-entrant call cannot double-charge.
+
+Margin: orders that would exceed free margin are rejected with a typed
+`Rejection`, recorded in the blotter rather than silently dropped.
+
+### 3.4 Intrabar resolution
+
+```python
+class IntrabarResolver(Protocol):
+    def resolve(self, position: Position, bar: BarEvent,
+                quotes: Quotes) -> ExitEvent | None: ...
+```
+
+Two implementations, chosen by config:
+
+- `PessimisticResolver` (default): if both levels are inside the bar, the stop
+  wins.
+- `TickResolver`: replays that bar's ticks from the tick store in order and
+  takes whichever level is touched first.
+
+`TickResolver` needs tick access for the bars in question. I propose lazy
+per-bar tick loading rather than holding a tick frame, so memory stays bounded.
+
+### 3.5 Determinism
+
+A single `numpy.random.Generator(PCG64(seed))` is created by the runner and
+passed explicitly to anything that needs randomness. No module-level RNG, no
+calls to `random` or `np.random` global state. Given a seed, config and data
+hash, two runs produce byte-identical blotters, and the runner asserts that in a
+test.
+
+---
+
+## 4. Metrics
+
+Blotter row: entry and exit time, side, size, entry and exit price, entry and
+exit side used, gross P&L, spread cost, slippage cost, swap cost, net P&L,
+`ExitReason` in {STOP, TARGET, TIME, ROLLOVER, MARGIN, END_OF_DATA}, session at
+entry, bars held.
+
+Metrics: total return, CAGR, Sharpe, Sortino, max drawdown, drawdown duration,
+profit factor, win rate, average win, average loss, expectancy per trade in both
+dollars and price units, trade count, exposure time, and cost drag as a fraction
+of gross P&L. Broken down by session and by year.
+
+Two conventions I want to pin down now rather than argue about later: Sharpe and
+Sortino are computed on the bar-level equity curve, annualised by the number of
+tradeable bars per year rather than 252, and the risk-free rate comes from
+config, defaulting to zero.
+
+---
+
+## 5. Test plan
+
+| Acceptance test | How it is enforced |
+|---|---|
+| Calibration | Paired differential, costs on versus off, identical seed, time-based exits. Asserts the difference equals the configured spread plus slippage within tolerance. Printed as a banner in the run report. |
+| Lookahead raises | Strategy reads `window[window.index + 1]`; test asserts `LookaheadError`. Repeated for out-of-range slices and for writes to a returned array. |
+| Gap-through fills worse | Fixture where the bar opens through the stop; asserts fill is strictly worse than the stop price. |
+| Swap once per rollover | Position held across N rollovers; asserts exactly N charges at the configured rate, and that a repeated call does not double-charge. |
+| Zero-cost hand calculation | Ten-trade fixture with all costs zero; asserts P&L matches a table of hand-computed numbers exactly. |
+| No unaccounted rollover hold | Asserts no position spans a rollover bar without a matching swap charge, and that forced exit fires on the last bar before rollover, with the boundary computed in exchange-local time so it is checked in both DST regimes. |
+
+Plus: determinism under a fixed seed, and a performance test asserting three
+years of M15 completes inside the budget.
+
+---
+
+## 6. Data volume reality check
+
+The calibration run wants two or more years. We currently hold one month of
+ticks, fetched at roughly 0.4 files per second through this session's proxy.
+Three years is 26,280 hourly files, about 18 hours of downloading, and this
+container is ephemeral. Two years is about 12 hours.
+
+That is a scheduling problem worth deciding before the acceptance runs, not
+during them. It is another argument for the synthetic fixture carrying the sharp
+calibration test, with the real-data run as a slower confirmation.
+
+---
+
+## 7. Open questions
+
+1. Approve replacing the absolute calibration assertion with the paired
+   differential? This is the one I would most like a yes on.
+2. Position sizing model: fixed units, fixed fractional risk per trade, or both
+   behind a `Sizer` protocol? I lean to a protocol with fixed-risk as default.
+3. Should multiple concurrent positions be allowed to net, or stay independent
+   with independent stops? The brief says independent; confirming, because it
+   affects margin accounting.
+4. Is the 60 second budget for the engine loop alone, or does it include
+   loading three years of bars from Parquet?
+5. Swap convention: charged per rollover crossing at a flat rate, or the triple
+   Wednesday convention that most brokers use?
