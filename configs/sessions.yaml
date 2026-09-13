@@ -2,9 +2,17 @@
 #
 # These are deliberately not UTC constants. 17:00 New York is 21:00 UTC in
 # summer and 22:00 UTC in winter; hardcoding either one silently misplaces the
-# rollover for half the year.
+# rollover for half the year. SessionCalendar is the single source of truth for
+# every rollover question: forced exits, swap charges and session labels.
 timezone: America/New_York
 week_open:  {weekday: sunday, time: "18:00"}
 week_close: {weekday: friday, time: "17:00"}
 daily_break: {start: "17:00", end: "18:00"}
 holidays_file: configs/holidays.csv
+
+# Intraday session windows, each in its own venue timezone so DST is handled by
+# the tz database rather than UTC arithmetic. OVERLAP is london AND ny.
+windows:
+  asian:  {tz: Asia/Tokyo,       start: "09:00", end: "15:00"}
+  london: {tz: Europe/London,    start: "08:00", end: "16:30"}
+  ny:     {tz: America/New_York, start: "08:00", end: "17:00"}

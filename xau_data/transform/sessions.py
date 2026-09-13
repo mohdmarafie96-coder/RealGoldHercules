@@ -15,15 +15,27 @@ from pathlib import Path
 from typing import Final, Iterator
 from zoneinfo import ZoneInfo
 
+from enum import Enum
+
 from ..config import SessionConfig
 from ..timeutils import UTC, require_utc
 
-__all__ = ["SessionCalendar", "WEEKDAYS"]
+__all__ = ["SessionCalendar", "SessionLabel", "WEEKDAYS"]
 
 WEEKDAYS: Final[dict[str, int]] = {
     "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
     "friday": 4, "saturday": 5, "sunday": 6,
 }
+
+
+class SessionLabel(str, Enum):
+    """Which intraday session an instant belongs to."""
+
+    ASIAN = "asian"
+    LONDON = "london"
+    OVERLAP = "overlap"
+    NY = "ny"
+    OFF = "off"
 
 
 class SessionCalendar:
@@ -94,3 +106,98 @@ class SessionCalendar:
             if self.is_tradeable(cur):
                 yield cur
             cur += step
+
+    # ------------------------------------------------------------------
+    # Rollover. This class is the SINGLE SOURCE OF TRUTH for rollover
+    # timing: forced exits, swap charges and session labels all come from
+    # here. There is no UTC hour constant anywhere in the codebase.
+    # ------------------------------------------------------------------
+
+    def rollover_for_instant(self, ts: datetime) -> datetime:
+        """The rollover instant governing the exchange-local day of ``ts``."""
+        return self.rollover_utc(self.local(ts).date())
+
+    def next_rollover(self, ts: datetime) -> datetime:
+        """The first rollover strictly after ``ts``."""
+        require_utc(ts)
+        d = self.local(ts).date()
+        for _ in range(8):
+            r = self.rollover_utc(d)
+            if r > ts:
+                return r
+            d += timedelta(days=1)
+        raise RuntimeError("no rollover found within 8 days")
+
+    def rollovers_crossed(self, start: datetime, end: datetime) -> list[datetime]:
+        """Rollover instants in the half-open interval (start, end].
+
+        This is what a swap charge iterates: exactly once per position per
+        rollover crossed, with no double counting at either edge.
+        """
+        require_utc(start, name="start")
+        require_utc(end, name="end")
+        if end <= start:
+            return []
+        out: list[datetime] = []
+        d = self.local(start).date() - timedelta(days=1)
+        last = self.local(end).date() + timedelta(days=1)
+        while d <= last:
+            r = self.rollover_utc(d)
+            if start < r <= end:
+                out.append(r)
+            d += timedelta(days=1)
+        return sorted(out)
+
+    def is_rollover_bar(self, ts_open: datetime, period_seconds: int) -> bool:
+        """True if the bar [ts_open, ts_open+period) contains a rollover."""
+        require_utc(ts_open, name="ts_open")
+        end = ts_open + timedelta(seconds=period_seconds)
+        return bool(self.rollovers_crossed(ts_open - timedelta(microseconds=1), end - timedelta(microseconds=1)))
+
+    def last_bar_open_before_rollover(
+        self, ts: datetime, period_seconds: int
+    ) -> datetime:
+        """Open time of the final bar that closes at or before the next rollover.
+
+        This is the forced-exit deadline. A position must be flat by the close
+        of this bar to avoid crossing the rollover.
+        """
+        require_utc(ts)
+        roll = self.next_rollover(ts)
+        step = timedelta(seconds=period_seconds)
+        # walk back from the rollover to the last bar whose close is <= roll
+        from ..timeutils import epoch_us, from_epoch_us, floor_to_period
+        period_us = period_seconds * 1_000_000
+        end_us = floor_to_period(epoch_us(roll), period_us)
+        return from_epoch_us(end_us - period_us)
+
+    # ------------------------------------------------------------------
+    # Session labels
+    # ------------------------------------------------------------------
+
+    def _in_window(self, ts: datetime, name: str) -> bool:
+        for w in self._cfg.windows:
+            if w.name != name:
+                continue
+            lt = ts.astimezone(ZoneInfo(w.tz))
+            if lt.weekday() >= 5:
+                return False
+            return w.start <= lt.time() < w.end
+        return False
+
+    def session_label(self, ts: datetime) -> "SessionLabel":
+        """Which intraday session ``ts`` falls in. DST-aware by construction."""
+        require_utc(ts)
+        if not self.is_tradeable(ts):
+            return SessionLabel.OFF
+        in_london = self._in_window(ts, "london")
+        in_ny = self._in_window(ts, "ny")
+        if in_london and in_ny:
+            return SessionLabel.OVERLAP
+        if in_ny:
+            return SessionLabel.NY
+        if in_london:
+            return SessionLabel.LONDON
+        if self._in_window(ts, "asian"):
+            return SessionLabel.ASIAN
+        return SessionLabel.OFF

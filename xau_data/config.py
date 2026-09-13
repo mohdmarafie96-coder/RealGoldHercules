@@ -12,7 +12,8 @@ import yaml
 
 from .errors import ConfigError
 
-__all__ = ["Config", "load_config", "DukascopyConfig", "SessionConfig", "ContextSeries"]
+__all__ = ["Config", "load_config", "DukascopyConfig", "SessionConfig",
+           "SessionWindow", "ContextSeries"]
 
 _ENV_ROOT: Final[str] = "XAU_DATA_ROOT"
 
@@ -58,6 +59,14 @@ class ContextSeries:
 
 
 @dataclass(frozen=True, slots=True)
+class SessionWindow:
+    name: str
+    tz: str
+    start: dtime
+    end: dtime
+
+
+@dataclass(frozen=True, slots=True)
 class SessionConfig:
     timezone: str
     week_open_weekday: str
@@ -67,6 +76,7 @@ class SessionConfig:
     break_start: dtime
     break_end: dtime
     holidays_file: Path | None
+    windows: tuple[SessionWindow, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,6 +166,18 @@ def load_config(
 
     db = sess.get("daily_break") or {}
     hol = sess.get("holidays_file")
+    windows: list[SessionWindow] = []
+    for wname, w in (sess.get("windows") or {}).items():
+        windows.append(SessionWindow(
+            name=wname,
+            tz=_req(w, "tz", f"session window {wname}"),
+            start=_parse_time(_req(w, "start", f"session window {wname}"), wname),
+            end=_parse_time(_req(w, "end", f"session window {wname}"), wname),
+        ))
+        try:
+            ZoneInfo(windows[-1].tz)
+        except Exception as exc:
+            raise ConfigError(f"session window {wname}: bad timezone") from exc
     session = SessionConfig(
         timezone=_req(sess, "timezone", "sessions"),
         week_open_weekday=_req(_req(sess, "week_open", "sessions"), "weekday", "week_open"),
@@ -165,6 +187,7 @@ def load_config(
         break_start=_parse_time(_req(db, "start", "daily_break"), "daily_break"),
         break_end=_parse_time(_req(db, "end", "daily_break"), "daily_break"),
         holidays_file=Path(hol) if hol else None,
+        windows=tuple(windows),
     )
     try:
         ZoneInfo(session.timezone)
