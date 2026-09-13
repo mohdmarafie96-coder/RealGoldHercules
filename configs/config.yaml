@@ -1,0 +1,83 @@
+# XAUUSD data layer configuration.
+# No paths or dates are hardcoded in code; everything lives here or on the CLI.
+
+paths:
+  # Root for all persisted data. Override with the XAU_DATA_ROOT environment
+  # variable, which takes precedence over this value.
+  #
+  # DURABILITY: this container is ephemeral. Anything under data_root is lost
+  # when the session ends unless data_root points at a mounted persistent
+  # volume. See storage/README.md for the options.
+  data_root: ./data
+
+symbol:
+  name: XAUUSD
+  # Dukascopy stores integer prices; divide by 10**point_digits.
+  point_digits: 3
+  # Sanity band used by the validator to catch a wrong point_digits.
+  plausible_price_range: [800.0, 6000.0]
+
+timeframes: [M1, M5, M15, H1]
+
+ingest:
+  dukascopy:
+    base_url: https://datafeed.dukascopy.com/datafeed
+    # Dukascopy's month path component is ZERO-INDEXED (January = 00).
+    month_zero_indexed: true
+    requests_per_second: 0.5
+    max_concurrency: 2
+    max_attempts: 8
+    backoff_base_seconds: 2.0
+    backoff_max_seconds: 45.0
+    connect_timeout_seconds: 25.0
+    read_timeout_seconds: 60.0
+    # Keep the raw payloads so a decoder fix can be replayed without refetching.
+    keep_raw: true
+
+  context:
+    # Every series must declare how publication_time is derived. A config that
+    # sets publication_time == observation_time is rejected at load.
+    series:
+      US10Y:
+        source: fred
+        source_series_id: DGS10
+        publication: {rule: vintage, tz: America/New_York, at: "16:15"}
+      DFII10:
+        source: fred
+        source_series_id: DFII10
+        publication: {rule: vintage, tz: America/New_York, at: "16:15"}
+      VIX:
+        source: fred
+        source_series_id: VIXCLS
+        publication: {rule: market_close, tz: America/Chicago, at: "15:15"}
+      SPX:
+        source: fred
+        source_series_id: SP500
+        publication: {rule: market_close, tz: America/New_York, at: "16:00"}
+      WTI:
+        source: fred
+        source_series_id: DCOILWTICO
+        publication: {rule: vintage, tz: America/New_York, at: "16:30"}
+      DXY:
+        source: fred
+        source_series_id: DTWEXBGS
+        publication: {rule: vintage, tz: America/New_York, at: "16:15"}
+        note: >-
+          Trade-weighted broad dollar index, not ICE DXY, which is licensed.
+          Different basket and daily only. Flagged in the schema README.
+    safety_lag_seconds: 0
+
+  calendar:
+    sources: []          # CSV import path or weekly archiver; none configured yet
+
+join:
+  context:
+    key: publication_time      # the only legal value
+    allow_exact_matches: false # strict: published AT bar open is not yet usable
+
+quality:
+  spike_sigma: 8.0
+  min_tick_count: {M1: 1, M5: 3, M15: 5, H1: 20}
+  max_spread: 25.0
+  context_staleness_days: 5
+  fail_on: error

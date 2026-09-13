@@ -1,0 +1,10 @@
+# Trading sessions and the daily rollover, expressed in EXCHANGE-LOCAL time.
+#
+# These are deliberately not UTC constants. 17:00 New York is 21:00 UTC in
+# summer and 22:00 UTC in winter; hardcoding either one silently misplaces the
+# rollover for half the year.
+timezone: America/New_York
+week_open:  {weekday: sunday, time: "18:00"}
+week_close: {weekday: friday, time: "17:00"}
+daily_break: {start: "17:00", end: "18:00"}
+holidays_file: configs/holidays.csv
