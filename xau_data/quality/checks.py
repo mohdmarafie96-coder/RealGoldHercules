@@ -193,3 +193,80 @@ ALL_CHECKS = (
 
 def run_checks(bars: pa.Table, **kwargs: Any) -> list[Finding]:
     return [fn(bars, **kwargs) for fn in ALL_CHECKS]
+
+
+# --- candle-specific checks ------------------------------------------------
+
+
+def check_stripped_synthetic(
+    bars: pa.Table, *, candle_days: pa.Table | None = None, **_: Any
+) -> Finding:
+    """Report vendor forward-fill removed per day, and flag level shifts.
+
+    A steady count is expected: one rollover hour is 60 minutes, and a Sunday
+    contributes the pre-open block. What matters is a CHANGE in the level,
+    which means the vendor altered something upstream.
+    """
+    if candle_days is None or candle_days.num_rows == 0:
+        return Finding("stripped_synthetic", "info", 0, "no candle-day manifest supplied")
+
+    tbl = candle_days.sort_by([("day_utc", "ascending")])
+    days = tbl["day_utc"].to_pylist()
+    stripped = np.asarray(tbl["stripped_synthetic"].to_numpy(zero_copy_only=False),
+                          dtype=float)
+    kept = np.asarray(tbl["kept"].to_numpy(zero_copy_only=False), dtype=float)
+    total = int(stripped.sum())
+
+    samples = [
+        f"total stripped {total:,} over {len(days)} days "
+        f"(mean {stripped.mean():.0f}/day, median {np.median(stripped):.0f})",
+        f"kept {int(kept.sum()):,} minutes",
+    ]
+
+    # weekday profile: Sunday and holiday-adjacent days legitimately differ
+    by_wd: dict[int, list[float]] = {}
+    for d, s_ in zip(days, stripped):
+        by_wd.setdefault(d.weekday(), []).append(s_)
+    names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    samples += [
+        f"{names[wd]}: median {np.median(v):.0f} over {len(v)} days"
+        for wd, v in sorted(by_wd.items())
+    ]
+
+    # level shift: compare each day against the median of its own weekday
+    outliers: list[str] = []
+    for d, s_ in zip(days, stripped):
+        med = float(np.median(by_wd[d.weekday()]))
+        if abs(s_ - med) > max(60.0, 0.5 * med):
+            outliers.append(f"{d:%Y-%m-%d %a} stripped={int(s_)} vs {names[d.weekday()]} median {med:.0f}")
+
+    sev: Severity = "warn" if outliers else "info"
+    return Finding(
+        "stripped_synthetic", sev, len(outliers),
+        f"{total:,} synthetic minutes stripped across {len(days)} days; "
+        f"{len(outliers)} day(s) deviate from their weekday median",
+        samples[:6] + outliers[:8],
+    )
+
+
+def check_candle_day_coverage(
+    bars: pa.Table, *, candle_days: pa.Table | None = None, **_: Any
+) -> Finding:
+    """Days present in the manifest with zero kept minutes are suspicious."""
+    if candle_days is None or candle_days.num_rows == 0:
+        return Finding("candle_day_coverage", "info", 0, "no candle-day manifest supplied")
+    tbl = candle_days.sort_by([("day_utc", "ascending")])
+    days = tbl["day_utc"].to_pylist()
+    kept = tbl["kept"].to_numpy(zero_copy_only=False)
+    empty = [d for d, k in zip(days, kept) if k == 0]
+    return Finding(
+        "candle_day_coverage", "warn" if empty else "info", len(empty),
+        f"{len(empty)} ingested day(s) yielded no usable minutes",
+        [f"{d:%Y-%m-%d %a}" for d in empty[:10]],
+    )
+
+
+#: Checks that need the candle-day manifest. Appended after definition so the
+#: module stays readable top-to-bottom.
+CANDLE_CHECKS = (check_stripped_synthetic, check_candle_day_coverage)
+ALL_CHECKS = ALL_CHECKS + CANDLE_CHECKS

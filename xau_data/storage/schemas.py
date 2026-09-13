@@ -11,7 +11,8 @@ from typing import Final
 import pyarrow as pa
 
 __all__ = [
-    "TS", "TICKS", "BARS", "CONTEXT", "CALENDAR", "MANIFEST", "SCHEMAS",
+    "TS", "TICKS", "BARS", "BARS_M1", "CANDLE_DAY", "CONTEXT", "CALENDAR",
+    "MANIFEST", "SCHEMAS",
     "TIMEFRAMES", "TIMEFRAME_SECONDS", "bars_schema", "timestamp_fields",
 ]
 
@@ -140,7 +141,63 @@ MANIFEST: Final[pa.Schema] = pa.schema(
     },
 )
 
+#: Candle-derived M1 bars. Deliberately NOT the same shape as tick-derived
+#: BARS: a daily candle file cannot supply intrabar spread statistics or tick
+#: counts, and mid extremes are not recoverable because the bid high and the
+#: ask high need not occur at the same instant. Only exact quantities appear.
+BARS_M1: Final[pa.Schema] = pa.schema(
+    [
+        pa.field("ts_open", TS, nullable=False),
+        pa.field("ts_end_exclusive", TS, nullable=False),
+        pa.field("bid_open", pa.float64(), nullable=False),
+        pa.field("bid_high", pa.float64(), nullable=False),
+        pa.field("bid_low", pa.float64(), nullable=False),
+        pa.field("bid_close", pa.float64(), nullable=False),
+        pa.field("ask_open", pa.float64(), nullable=False),
+        pa.field("ask_high", pa.float64(), nullable=False),
+        pa.field("ask_low", pa.float64(), nullable=False),
+        pa.field("ask_close", pa.float64(), nullable=False),
+        pa.field("mid_open", pa.float64(), nullable=False),
+        pa.field("mid_close", pa.float64(), nullable=False),
+        pa.field("spread_open", pa.float64(), nullable=False),
+        pa.field("spread_close", pa.float64(), nullable=False),
+        pa.field("bid_volume", pa.float64(), nullable=False),
+        pa.field("ask_volume", pa.float64(), nullable=False),
+    ],
+    metadata={
+        b"source": b"Dukascopy BID/ASK_candles_min_1.bi5, one file per day per side",
+        b"ts_open": b"BAR OPEN TIME in UTC, left-closed right-open, as for BARS",
+        b"not_available": (
+            b"spread_mean/max/min and tick_count cannot be derived from candles. "
+            b"mid_high and mid_low are OMITTED rather than approximated: the bid "
+            b"high and ask high need not be simultaneous, so (bid_high+ask_high)/2 "
+            b"is not the mid high. Use bid_* or ask_* extremes explicitly."
+        ),
+        b"synthetic_stripped": (
+            b"Minutes with volume==0 AND flat OHLC are Dukascopy forward-fill and "
+            b"are REMOVED at ingest. Counts are recorded per day in the manifest."
+        ),
+    },
+)
+
+#: One row per ingested candle day: how many synthetic minutes were stripped.
+CANDLE_DAY: Final[pa.Schema] = pa.schema(
+    [
+        pa.field("symbol", pa.string(), nullable=False),
+        pa.field("day_utc", TS, nullable=False),
+        pa.field("records_bid", pa.int32(), nullable=False),
+        pa.field("records_ask", pa.int32(), nullable=False),
+        pa.field("stripped_synthetic", pa.int32(), nullable=False),
+        pa.field("kept", pa.int32(), nullable=False),
+        pa.field("rollover_hour_utc", pa.int32(), nullable=True),
+        pa.field("ingested_at", TS, nullable=False),
+    ],
+    metadata={b"purpose": b"A sudden change in stripped_synthetic means something upstream shifted."},
+)
+
 SCHEMAS: Final[dict[str, pa.Schema]] = {
+    "bars_m1": BARS_M1,
+    "candle_day": CANDLE_DAY,
     "ticks": TICKS, "bars": BARS, "context": CONTEXT,
     "calendar": CALENDAR, "manifest": MANIFEST,
 }
