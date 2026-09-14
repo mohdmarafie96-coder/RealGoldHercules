@@ -344,6 +344,124 @@ The resolution is pre-registration, not re-selection:
 3. **An edge present only at 4/6 is diagnostic of overfitting**, and is reported
    as such rather than as a finding.
 
+### 0.2i KILL CRITERIA — pre-registered 2026-09-14, before any model is fitted
+
+The register defined no failure condition. It does now, and it is dated: every
+figure below was fixed **before the first fit**, from the label distribution
+alone. Nothing here may be revised after seeing a model result.
+
+**THE RESULT — one number.**
+
+```
+E_excess = Wnet(model, folds 1-4 pooled) - Wnet(always-long, same bars)
+```
+
+where `Wnet` is uniqueness-weighted mean net return in ATR. Fixed conditions:
+the pre-registered 4.0/6.0 geometry, the full 58-feature set, the dual-fire
+rule of 0.2j, fold 0 excluded (0.2g), both sides combined into one trade
+stream. **That single scalar is the result.** Everything else — each side
+separately, each fold separately, the 3.0/4.5 and 6.0/9.0 geometries, the
+time-of-day ablation, the cost-regime split — is a **diagnostic**, and no
+diagnostic may be promoted to the headline after the fact.
+
+The always-long comparator is fixed at its measured value:
+
+```
+Wnet(always-long, folds 1-4 pooled) = +0.0398 ATR     [COMPUTED]
+```
+
+**The noise floor, measured before the fit.**
+
+| quantity | value |
+|---|---:|
+| pooled label sd (long) | 3.9151 ATR |
+| folds 1-4 pooled test effective n | 2,863.3 |
+| SE of `Wnet` at 100% coverage | 0.0731 |
+| 95% CI half-width at 100% coverage | 0.1433 |
+
+The sd is large because 60.3% of labels sit on the two barrier spikes. This
+sample **cannot resolve a small edge**, and the criteria below are set from
+that fact rather than from ambition.
+
+**Attempt cap: THREE full walk-forward runs, total.** Attempt 1 is the
+pre-registered configuration. Attempts 2 and 3 each require a written, dated
+reason recorded in this document *before* the run. Bonferroni over three
+attempts puts the one-sided threshold at α = 0.0167, z = 2.128:
+
+| coverage | test eff n | SE | minimum detectable E_excess |
+|---:|---:|---:|---:|
+| 100% | 2,863 | 0.0731 | +0.156 |
+| 50% | 1,432 | 0.1034 | +0.220 |
+| 30% | 859 | 0.1335 | +0.284 |
+| 25% | 716 | 0.1462 | +0.311 |
+| 20% | 573 | 0.1635 | +0.348 |
+
+**PASS requires all four:**
+
+1. `E_excess > 0` at the one-sided Bonferroni bound — that is,
+   `E_excess - 2.128 × SE > 0`, with SE computed at the realised coverage.
+2. `E_excess >= +0.15 ATR` as a point estimate. This is the economic floor:
+   0.15 is roughly three quarters of the measured 0.2002 ATR round-trip cost,
+   so the edge must be at least comparable in size to what it pays to trade.
+3. **At least 3 of the 4 folds** (1, 2, 3, 4) show a positive per-fold
+   `E_excess` point estimate. Per-fold significance is *not* required and is
+   not achievable: the per-fold 95% half-width is ≈0.28 ATR, wider than any
+   plausible edge. Only the sign is required per fold.
+4. **No single fold worse than −0.30 ATR.** A catastrophic fold disqualifies
+   even if the pooled number passes.
+
+**ABANDON the approach if, after the third attempt, condition 1 or 2 fails.**
+Not "try a different model family", not "revisit the features" — the walk-
+forward says the edge is not there at a size this sample can see, and the
+honest report is that result.
+
+**Coverage floor: 20%.** A model taking fewer than 20% of test bars produces
+an effective n under 573, where the minimum detectable effect (+0.348 ATR)
+exceeds anything the label distribution can plausibly deliver. Such a run is
+reported as **untestable**, not as a result, and does not consume an attempt
+only if it is aborted before the outer test windows are scored.
+
+### 0.2j Threshold selection and the dual-fire rule
+
+**Threshold objective — expectancy, not P(net>0).**
+
+C.2 originally floored the threshold at the breakeven win rate
+`(S + c)/(S + T)`. That assumes outcomes are only the two barriers. They are
+not: **39.7% of labels exit at time or rollover with continuous returns at
+sd 1.78–2.05 ATR**, so `P(net > 0)` scores a +0.01 rollover exit identically
+to a +5.99 target hit. Maximising it is therefore not maximising expectancy.
+
+**The threshold is selected on realised uniqueness-weighted EXPECTANCY over the
+inner folds.** The breakeven floor is still computed and reported per fold as a
+sanity bound — a selected threshold implying a win rate below it is a red flag
+worth explaining — but it is **not the objective**.
+
+**Winner composition, reported per fold.** For the trades the model takes and
+wins, report the exit-reason mix (target / stop / rollover / time). If wins are
+mostly small rollover exits rather than target hits, the barrier geometry is
+not doing the work and the reported expectancy rests on the continuous tail,
+not on the trade thesis. That is a finding, and it is reported as one.
+
+**Dual-fire: TAKE NEITHER.**
+
+When both side-models clear their thresholds on the same bar, no position is
+opened, and the frequency is reported per fold.
+
+The justification is measured, not stylistic: across 112,615 labelled bars,
+**the number on which both sides are net-positive is zero.**
+
+| both sides net-positive | 0 | 0.00% |
+|---|---:|---:|
+| both sides net-negative | 16,206 | 14.39% |
+| exactly one positive | 96,409 | 85.61% |
+
+Mid-to-mid the two sides' gross returns are near-exact negatives, so their net
+returns sum to roughly −2c and cannot both clear zero. A dual fire therefore
+means **at least one of the two models is wrong, by construction** — it is a
+disagreement signal, not an opportunity. Taking the higher probability or the
+higher expected value would be acting on a signal the data says is internally
+inconsistent.
+
 ### 0.2a Walk-forward must use an EXPANDING window
 
 The volatility regime range across the history is more than 5x, from 8.6% to

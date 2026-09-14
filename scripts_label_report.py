@@ -173,9 +173,9 @@ def main() -> int:
     L.append(bar("5+6. FOLDS: NULL RATES AND THE ALWAYS-LONG BENCHMARK"))
     ex = after["label_exit_index"].to_numpy(zero_copy_only=False)
     ex = np.where(live_a, ex, -1)
-    folds = expanding_folds(ex, n_folds=int(wf["n_folds"]),
+    folds = expanding_folds(ex, n_blocks=int(wf["n_blocks"]),
                             embargo_bars=int(wf["embargo_bars"]))
-    L.append(f"  n_folds parameter = {wf['n_folds']} (that is the number of "
+    L.append(f"  n_blocks parameter = {wf['n_blocks']} (that is the number of "
              f"equal BLOCKS); folds produced = {len(folds)}")
     L.append("\n  fold   train     test  purged  embargo   train_eff  test_eff"
              "   AL net    AL wtd   AL win%")

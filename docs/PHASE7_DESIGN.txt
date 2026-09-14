@@ -31,17 +31,22 @@ A0. FOLD COUNT -- FIVE, NOT SIX
 
   ANSWER    FIVE.
 
-  The config key walk_forward.n_folds: 6 is the number of equal BLOCKS the
-  history is cut into, not the number of folds. In xau_backtest/labeling/
-  weights.py, expanding_folds() builds edges = linspace(0, n, n_folds + 1) and
-  then loops k = 1 .. n_folds - 1. Fold k trains on blocks 0..k-1 and tests on
-  block k. Block 0 is a training seed and is never a test window.
+  The config key was named walk_forward.n_folds but is the number of equal
+  BLOCKS the history is cut into, not the number of folds. In
+  xau_backtest/labeling/weights.py, expanding_folds() builds
+  edges = linspace(0, n, n_blocks + 1) and then loops k = 1 .. n_blocks - 1.
+  Fold k trains on blocks 0..k-1 and tests on block k. Block 0 is a training
+  seed and is never a test window.
 
       SIX BLOCKS  ->  FIVE FOLDS
 
-  The rev 1 prose was wrong; the rev 1 table was right. The parameter name is
-  misleading and should be read as n_blocks. Not renamed yet -- renaming a
-  config key mid-project is a change worth making deliberately, see D4.
+  The rev 1 prose was wrong; the rev 1 table was right.
+
+  RENAMED 2026-09-14, before any results existed to be confused by it:
+  n_folds -> n_blocks in configs/config.yaml, weights.py, the tests and
+  scripts_label_report.py. Guarded by
+  tests/test_labeling.py::test_n_blocks_is_blocks_not_folds, which asserts
+  that b blocks produce b-1 folds for b in (4, 5, 6). See D4.
 
 --------------------------------------------------------------------------------
 A1. ALWAYS-LONG BENCHMARK -- COMPUTED, RECORDED AS 0.2f
@@ -264,6 +269,16 @@ ID    CONSTRAINT                        ENFORCED IN / GUARDED BY
       at 4.0/6.0. 3.0/4.5 and 6.0/9.0    phase 7 robustness block (PART C.7)
       are robustness checks only.
 
+0.2i  KILL CRITERIA, pre-registered      docs/BACKTEST_DESIGN.md 0.2i
+      2026-09-14. One headline scalar,   see PART C.0 below
+      four PASS conditions, a coverage
+      floor, and a cap of THREE runs.
+
+0.2j  Threshold selected on EXPECTANCY,  docs/BACKTEST_DESIGN.md 0.2j
+      not P(net>0). Breakeven is a       see PART C.1 and C.2
+      reported sanity bound. Dual fire
+      -> TAKE NEITHER.
+
 FEAT  EVERY feature scale-free. No       xau_backtest/features/
       absolute dollar value, or the      tests/test_feature_causality.py
       model learns the calendar.           test_no_feature_scales_with_price_level
@@ -307,7 +322,7 @@ ASIAN Asian range POSITION is a dead     xau_backtest/features/build.py
       relative to trailing norm is       feature: asian_range_atr
       fair game as volatility context.
 
-TEST SUITE  190 passing
+TEST SUITE  191 passing
 
 
 --------------------------------------------------------------------------------
@@ -354,6 +369,71 @@ PART C -- PHASE 7 WALK-FORWARD DESIGN PROPOSAL (awaiting approval)
 ================================================================================
 
 --------------------------------------------------------------------------------
+C.0  KILL CRITERIA -- PRE-REGISTERED 2026-09-14, BEFORE ANY FIT
+--------------------------------------------------------------------------------
+  THE RESULT -- ONE NUMBER
+
+    E_excess = Wnet(model, folds 1-4 pooled) - Wnet(always-long, same bars)
+
+  where Wnet is uniqueness-weighted mean net return in ATR, under the
+  pre-registered 4.0/6.0 geometry, the full 58-feature set, the dual-fire rule
+  of 0.2j, fold 0 excluded (0.2g), both sides combined into ONE trade stream.
+
+    Wnet(always-long, folds 1-4 pooled) = +0.0398 ATR          [COMPUTED]
+
+  EVERYTHING ELSE IS A DIAGNOSTIC and may not be promoted to the headline after
+  the fact: each side separately, each fold separately, the 3.0/4.5 and 6.0/9.0
+  geometries, the time-of-day ablation, the cost-regime split.
+
+  THE NOISE FLOOR, MEASURED BEFORE THE FIT              [COMPUTED]
+
+    pooled label sd (long)                    3.9151 ATR
+    folds 1-4 pooled test effective n         2,863.3
+    SE of Wnet at 100% coverage               0.0731
+    95% CI half-width at 100% coverage        0.1433
+
+  The sd is large because 60.3% of labels sit on the two barrier spikes. This
+  sample CANNOT RESOLVE A SMALL EDGE. The criteria are set from that fact.
+
+  ATTEMPT CAP -- THREE full walk-forward runs, total. Attempt 1 is the
+  pre-registered configuration. Attempts 2 and 3 each require a written, dated
+  reason recorded in BACKTEST_DESIGN.md BEFORE the run.
+  Bonferroni over three attempts: one-sided alpha = 0.0167, z = 2.128.
+
+    coverage   test eff n      SE    min detectable E_excess
+    ------------------------------------------------------------
+        100%       2,863    0.0731         +0.156
+         50%       1,432    0.1034         +0.220
+         30%         859    0.1335         +0.284
+         25%         716    0.1462         +0.311
+         20%         573    0.1635         +0.348
+
+  PASS REQUIRES ALL FOUR
+
+    1. E_excess - 2.128 * SE > 0, with SE at the REALISED coverage.
+    2. E_excess >= +0.15 ATR as a point estimate. Economic floor: 0.15 is
+       about three quarters of the measured 0.2002 ATR round-trip cost, so
+       the edge must be comparable in size to what it pays to trade.
+    3. At least 3 of the 4 folds (1,2,3,4) show a POSITIVE per-fold E_excess
+       point estimate. Per-fold significance is NOT required and is NOT
+       achievable -- the per-fold 95% half-width is about 0.28 ATR, wider
+       than any plausible edge. Only the SIGN is required per fold.
+    4. No single fold worse than -0.30 ATR. A catastrophic fold disqualifies
+       even if the pooled number passes.
+
+  ABANDON if, after the third attempt, condition 1 or 2 fails. Not "try
+  another model family", not "revisit the features". The walk-forward says the
+  edge is not there at a size this sample can see, and that result is the
+  honest report.
+
+  COVERAGE FLOOR 20%. Below it the effective n is under 573 and the minimum
+  detectable effect (+0.348 ATR) exceeds anything the label distribution can
+  plausibly deliver. Such a run is reported as UNTESTABLE, not as a result,
+  and consumes an attempt unless aborted before the outer windows are scored.
+
+  ENFORCED    docs/BACKTEST_DESIGN.md section 0.2i
+
+--------------------------------------------------------------------------------
 C.1  WHAT THE MODEL PREDICTS
 --------------------------------------------------------------------------------
   Two INDEPENDENT binary classifiers, one per side:
@@ -382,20 +462,57 @@ C.1  WHAT THE MODEL PREDICTS
         They are not: the pessimistic resolver and the rollover truncation both
         bite asymmetrically, and the measured long/short gap is drift.
 
+  DUAL-FIRE RULE -- TAKE NEITHER.
+
+  When both side-models clear their thresholds on the same bar, NO POSITION is
+  opened, and the frequency is reported per fold.
+
+  The justification is measured, not stylistic.               [COMPUTED]
+  Across 112,615 labelled bars:
+
+    both sides net-positive         0    0.00%
+    both sides net-negative    16,206   14.39%
+    exactly one positive       96,409   85.61%
+
+  ZERO bars have both sides net-positive. Mid-to-mid the two sides' gross
+  returns are near-exact negatives, so their net returns sum to roughly -2c
+  and cannot both clear zero. A dual fire therefore means AT LEAST ONE OF THE
+  TWO MODELS IS WRONG, BY CONSTRUCTION. It is a disagreement signal, not an
+  opportunity. Taking the higher probability, or the higher expected value,
+  would be acting on a signal the data says is internally inconsistent.
+
+  ENFORCED    docs/BACKTEST_DESIGN.md section 0.2j
+
 --------------------------------------------------------------------------------
-C.2  THE DECISION RULE
+C.2  THE DECISION RULE -- SELECTED ON EXPECTANCY, NOT ON P(net>0)
 --------------------------------------------------------------------------------
-  Threshold on predicted probability, with a FLOOR at the fold's own computed
-  breakeven:
+  CORRECTION  An earlier draft floored the threshold at the breakeven win rate
+              (S + c)/(S + T) and made P(net > 0) the objective. That assumes
+              outcomes are ONLY the two barriers. They are not:
 
-      floor_fold = (S + c_fold) / (S + T)
+                60.3% of labels sit on two near-deterministic barrier spikes
+                39.7% exit at time or rollover, continuous, sd 1.78-2.05 ATR
 
-  using that fold's REALISED mean round-trip cost c_fold, never a hardcoded
-  0.5 and never a pooled c. The threshold itself is selected on inner folds
-  only and may only sit at or above the floor.
+              So P(net > 0) scores a +0.01 rollover exit identically to a
+              +5.99 target hit. Maximising it is NOT maximising expectancy.
 
-  This ties the decision rule directly to 0.2d: when the cost regime shifts
-  between folds, the bar the model must clear shifts with it automatically.
+  OBJECTIVE   The threshold is selected on REALISED UNIQUENESS-WEIGHTED
+              EXPECTANCY over the inner folds.
+
+  SANITY      The breakeven floor (S + c_fold)/(S + T) is still computed and
+  BOUND       reported per fold, using that fold's realised c. A selected
+              threshold implying a win rate below its own fold's breakeven is
+              a red flag that must be explained. It is REPORTED, never the
+              objective.
+
+  WINNER      For the trades the model takes AND wins, report the exit-reason
+  COMPOSITION mix (target / stop / rollover / time), per fold. If wins are
+              mostly small rollover exits rather than target hits, the barrier
+              geometry is not doing the work and the reported expectancy rests
+              on the continuous tail rather than on the trade thesis. That is
+              a finding and is reported as one.
+
+  ENFORCED    docs/BACKTEST_DESIGN.md section 0.2j
 
 --------------------------------------------------------------------------------
 C.3  FOLD STRUCTURE
@@ -452,6 +569,11 @@ C.6  PER-FOLD REPORT -- MANDATORY, NO EXCEPTIONS
     decomposition by exit reason (target/stop/rollover/time) (A3)
     per-feature null rate, train and test                    (0.2g)
     phase-4 baselines on the same test window
+    E_excess, per fold and pooled over folds 1-4             (0.2i)
+    coverage, as a fraction of test bars                     (0.2i)
+    the selected threshold AND the fold's breakeven bound    (0.2j)
+    exit-reason mix of the model's WINNERS specifically      (0.2j)
+    dual-fire frequency                                      (0.2j)
 
   HEADLINE RULE  the comparison is against the always-long figure, not against
                  zero, and fold 0 is not in the headline.
@@ -495,13 +617,15 @@ D1. [BLOCKED] PESSIMISTIC-RESOLVER BIAS, UNMEASURED.
 D2. [OPEN] Does the min_bars mask fully remove the time-of-day conditioning,
     or only its mechanism? Guard C.7.2 is the test. Not yet run.
 
-D3. [OPEN] Fold 0: reported separately per 0.2g, but should it be dropped
-    entirely? Reporting it separately is the conservative choice and is what
-    is proposed. Dropping it costs a fifth of the walk-forward and the
-    earliest regime. No decision needed before the first run.
+D3. [CLOSED 2026-09-14] Fold 0 is REPORTED SEPARATELY, not dropped. It stays
+    out of the headline E_excess (folds 1-4 only) and out of every PASS
+    condition in 0.2i, but its full fold report is produced and published.
 
-D4. [OPEN] walk_forward.n_folds is really n_blocks (A0). Renaming it is a
-    config-schema change. Proposed but not made.
+D4. [CLOSED 2026-09-14] walk_forward.n_folds renamed to n_blocks, in
+    configs/config.yaml, xau_backtest/labeling/weights.py, the tests and
+    scripts_label_report.py. Guarded by
+    tests/test_labeling.py::test_n_blocks_is_blocks_not_folds, which asserts
+    b blocks produce b-1 folds for b in (4,5,6).
 
 ================================================================================
 END

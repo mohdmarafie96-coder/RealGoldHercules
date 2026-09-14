@@ -210,7 +210,7 @@ def test_purging_removes_train_labels_that_reach_into_test():
     horizon = 20
     n = 600
     ex = np.arange(n) + horizon
-    folds = expanding_folds(ex, n_folds=4, embargo_bars=0)
+    folds = expanding_folds(ex, n_blocks=4, embargo_bars=0)
     for f in folds:
         te_lo = int(f.test[0])
         assert (ex[f.train] < te_lo).all(), (
@@ -221,8 +221,8 @@ def test_purging_removes_train_labels_that_reach_into_test():
 
 def test_embargo_drops_a_further_margin():
     ex = np.arange(600) + 5
-    no_emb = expanding_folds(ex, n_folds=4, embargo_bars=0)
-    emb = expanding_folds(ex, n_folds=4, embargo_bars=50)
+    no_emb = expanding_folds(ex, n_blocks=4, embargo_bars=0)
+    emb = expanding_folds(ex, n_blocks=4, embargo_bars=50)
     for a, b in zip(no_emb, emb):
         assert b.train.size < a.train.size
         assert b.embargoed > 0
@@ -231,7 +231,7 @@ def test_embargo_drops_a_further_margin():
 def test_folds_expand_and_never_roll():
     """Design doc 0.2a: training must grow, never slide."""
     ex = np.arange(1200) + 10
-    folds = expanding_folds(ex, n_folds=6, embargo_bars=0)
+    folds = expanding_folds(ex, n_blocks=6, embargo_bars=0)
     starts = [int(f.train[0]) for f in folds if f.train.size]
     sizes = [f.train.size for f in folds]
     assert all(s == 0 for s in starts), "training window slid instead of expanding"
@@ -240,7 +240,7 @@ def test_folds_expand_and_never_roll():
 
 def test_test_windows_are_contiguous_and_disjoint():
     ex = np.arange(1000) + 5
-    folds = expanding_folds(ex, n_folds=5, embargo_bars=0)
+    folds = expanding_folds(ex, n_blocks=5, embargo_bars=0)
     prev_hi = None
     for f in folds:
         lo, hi = int(f.test[0]), int(f.test[-1])
@@ -308,3 +308,10 @@ def test_masking_cuts_rollover_exits_hardest(cal):
     assert time_after == time_before, (
         "the mask removed a 48-bar time exit; it must only touch short runways"
     )
+
+
+def test_n_blocks_is_blocks_not_folds():
+    """Six blocks produce five folds. The old name promised six."""
+    ex = np.arange(600) + 3
+    for b in (4, 5, 6):
+        assert len(expanding_folds(ex, n_blocks=b, embargo_bars=0)) == b - 1

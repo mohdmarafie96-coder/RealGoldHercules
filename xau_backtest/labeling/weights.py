@@ -69,21 +69,28 @@ class Fold:
 
 
 def expanding_folds(
-    exit_index: I, *, n_folds: int = 6, embargo_bars: int = 0,
+    exit_index: I, *, n_blocks: int = 6, embargo_bars: int = 0,
     min_train: int = 1,
 ) -> list[Fold]:
     """EXPANDING-window walk-forward with purging and an embargo.
+
+    `n_blocks` is the number of equal BLOCKS the history is cut into, NOT the
+    number of folds. Fold k trains on blocks 0..k-1 and tests on block k for
+    k = 1..n_blocks-1, so block 0 is a training seed and is never a test
+    window: **n_blocks blocks produce n_blocks - 1 folds**. The parameter was
+    called `n_folds` until the rename; the old name read as a promise of six
+    folds where six blocks give five.
 
     Expanding, never rolling, per design doc 0.2a: volatility regimes cluster in
     time and a rolling window trained on 2023 would never have seen a bar above
     65 USD before meeting one of 287.
     """
     n = len(exit_index)
-    if n_folds < 2:
-        raise ValueError("need at least two folds")
-    edges = np.linspace(0, n, n_folds + 1).astype(np.int64)
+    if n_blocks < 2:
+        raise ValueError("need at least two blocks")
+    edges = np.linspace(0, n, n_blocks + 1).astype(np.int64)
     folds: list[Fold] = []
-    for k in range(1, n_folds):
+    for k in range(1, n_blocks):
         te_lo, te_hi = int(edges[k]), int(edges[k + 1])
         train_all = np.arange(0, te_lo, dtype=np.int64)
         if train_all.size < min_train:

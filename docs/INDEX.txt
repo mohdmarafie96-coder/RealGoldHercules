@@ -28,6 +28,8 @@ CONSTRAINTS, BY ID          (full text in BACKTEST_DESIGN.md, cross-referenced
   0.2f  the benchmark is ALWAYS-LONG, never zero
   0.2g  fold 0 is feature-deficient; reported separately
   0.2h  barrier geometry PRE-REGISTERED at 4.0/6.0
+  0.2i  KILL CRITERIA, pre-registered 2026-09-14 before any fit
+  0.2j  threshold on EXPECTANCY not P(net>0); dual fire -> take neither
 
 GENERATED EVIDENCE (data/_reports/)
   label_report.txt           source of every table in PHASE6_LABEL_REPORT.txt
@@ -58,7 +60,7 @@ PACKAGES
   xau_backtest/labeling/     triple-barrier labels, uniqueness weights,
                              purged and embargoed expanding folds
 
-TESTS  190 passing
+TESTS  191 passing
   test_window.py             14  lookahead barrier, incl. an adversarial
                                  strategy and a reachability audit
   test_sessions_dst.py      105  both DST weeks x 2021-2026, plus a tokenised
@@ -67,8 +69,9 @@ TESTS  190 passing
   test_engine_acceptance.py  12  incl. paired differential cost calibration
   test_features.py           11
   test_feature_causality.py  11  causality and scale-freedom, EVERY feature
-  test_labeling.py           15  execution fidelity, the min_bars mask,
-                                 purging, embargo, expanding folds
+  test_labeling.py           16  execution fidelity, the min_bars mask,
+                                 purging, embargo, expanding folds, and that
+                                 n_blocks blocks produce n_blocks-1 folds
   test_no_hardcoded_costs.py  5  no cost assumption may hide in a default
 
 OPEN BLOCKER

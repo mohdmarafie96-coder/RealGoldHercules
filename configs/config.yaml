@@ -111,7 +111,7 @@ labeling:
   atr_period: 14
 
 walk_forward:
-  n_folds: 6
+  n_blocks: 6                  # equal BLOCKS, not folds: 6 blocks -> 5 folds
   embargo_bars: 96             # one trading day, on top of purging
 
 join:
