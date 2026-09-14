@@ -71,20 +71,44 @@ class HttpFetcher:
         connect_timeout_seconds: float,
         read_timeout_seconds: float,
         max_connections: int = 2,
+        recycle_after: int = 50,
     ) -> None:
         self._limiter = RateLimiter(requests_per_second)
         self._max_attempts = max_attempts
         self._base = backoff_base_seconds
         self._cap = backoff_max_seconds
-        self._client = httpx.Client(
-            timeout=httpx.Timeout(read_timeout_seconds, connect=connect_timeout_seconds),
+        self._connect = connect_timeout_seconds
+        self._read = read_timeout_seconds
+        self._max_connections = max_connections
+        self._recycle_after = max(1, recycle_after)
+        self._since_recycle = 0
+        self._client = self._new_client()
+
+    def _new_client(self) -> httpx.Client:
+        # Every timeout is set explicitly, POOL INCLUDED. A pool wait with no
+        # deadline is how a leaked connection wedges a sequential job forever:
+        # observed in the wild as 34 minutes blocked in wait_for_connection.
+        return httpx.Client(
+            timeout=httpx.Timeout(
+                self._read, connect=self._connect, read=self._read,
+                write=self._read, pool=min(30.0, self._read),
+            ),
             limits=httpx.Limits(
-                max_connections=max_connections,
-                max_keepalive_connections=max_connections,
-                keepalive_expiry=90.0,
+                max_connections=self._max_connections,
+                max_keepalive_connections=self._max_connections,
+                keepalive_expiry=30.0,
             ),
             follow_redirects=True,
         )
+
+    def _recycle(self) -> None:
+        """Drop the pool and start a fresh one. Cheap insurance against leaks."""
+        try:
+            self._client.close()
+        except Exception:
+            pass
+        self._client = self._new_client()
+        self._since_recycle = 0
 
     def close(self) -> None:
         self._client.close()
@@ -107,19 +131,36 @@ class HttpFetcher:
         last: str = "no attempt made"
         for attempt in range(self._max_attempts):
             self._limiter.acquire()
+            if self._since_recycle >= self._recycle_after:
+                self._recycle()
+            self._since_recycle += 1
+            r = None
             try:
                 r = self._client.get(url)
+                status, content = r.status_code, r.content
+            except httpx.PoolTimeout as exc:
+                # the pool is wedged; a fresh one is the only reliable cure
+                last = f"PoolTimeout: {exc}"
+                self._recycle()
             except httpx.HTTPError as exc:
                 last = f"{type(exc).__name__}: {exc}"
+                # transport-level failures are exactly when connections leak
+                self._recycle()
             else:
-                if r.status_code in _DENY_STATUS:
+                if status in _DENY_STATUS:
                     raise PolicyDeniedError(
-                        f"egress policy refused {url} with {r.status_code}; not retried"
+                        f"egress policy refused {url} with {status}; not retried"
                     )
-                if r.status_code in (200, 404):
-                    return FetchResult(r.status_code, r.content, attempt + 1)
-                if r.status_code not in _RETRY_STATUS:
-                    raise FetchError(f"{url}: unexpected status {r.status_code}")
-                last = f"status {r.status_code}"
+                if status in (200, 404):
+                    return FetchResult(status, content, attempt + 1)
+                if status not in _RETRY_STATUS:
+                    raise FetchError(f"{url}: unexpected status {status}")
+                last = f"status {status}"
+            finally:
+                if r is not None:
+                    try:
+                        r.close()
+                    except Exception:
+                        pass
             time.sleep(self._sleep_for(attempt, None))
         raise FetchError(f"{url}: giving up after {self._max_attempts} attempts ({last})")
