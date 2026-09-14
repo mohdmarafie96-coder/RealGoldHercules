@@ -126,6 +126,29 @@ Phase 7 must therefore report, per fold:
 and any claim that performance improved over time must be checked against the
 cost-drag series before it is believed.
 
+### 0.2c NEVER require complete cases
+
+Only 60% of feature rows are complete on all 58 features. That is by design,
+not damage:
+
+- The four one-year percentile ranks null the first 23,628 bars, a full year,
+  which you approved as the cost of a fixed trailing window.
+- `asian_range_atr` is null until the Asian session has closed on that day,
+  which is structurally correct: before then there is no range to measure.
+- `session_progress` is null outside a session, because progress through a
+  session is undefined when there is no session.
+
+Dropping incomplete rows would discard 40% of the sample to fix nothing.
+
+**Constraint: phase 7 uses LightGBM's native null handling and never requires
+complete cases.** No imputation, no forward fill, no `dropna`. LightGBM routes
+nulls down a learned default branch at each split, which is strictly more
+informative than any fill: "the Asian session has not closed yet" is a real
+state, and filling it with a number would tell the model something false.
+
+Any model that cannot take nulls natively must be given an explicit missingness
+indicator alongside the filled column, never a silent fill.
+
 ### 0.2a Walk-forward must use an EXPANDING window
 
 The volatility regime range across the history is more than 5x, from 8.6% to

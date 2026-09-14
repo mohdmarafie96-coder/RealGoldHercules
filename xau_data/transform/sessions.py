@@ -185,6 +185,56 @@ class SessionCalendar:
             return w.start <= lt.time() < w.end
         return False
 
+    def session_bounds(self, ts: datetime) -> tuple[datetime, datetime] | None:
+        """[start, end) of the LABELLED span containing ts, from config alone.
+
+        Not measured from observed bars: the schedule is known in advance, so
+        this is causal. It also differs from the configured window, because
+        `overlap` carves the middle out of `london` and `ny`:
+
+            london span  = [london_open, ny_open)
+            overlap span = [max(opens), min(closes))
+            ny span      = [london_close, ny_close)
+
+        Returns None for OFF, where progress is meaningless.
+        """
+        require_utc(ts)
+        label = self.session_label(ts)
+        if label is SessionLabel.OFF:
+            return None
+        win = {w.name: w for w in self._cfg.windows}
+
+        def edges(name: str) -> tuple[datetime, datetime]:
+            w = win[name]
+            tz = ZoneInfo(w.tz)
+            local = ts.astimezone(tz)
+            s = datetime.combine(local.date(), w.start, tzinfo=tz).astimezone(UTC)
+            e = datetime.combine(local.date(), w.end, tzinfo=tz).astimezone(UTC)
+            return s, e
+
+        if label is SessionLabel.ASIAN:
+            return edges("asian")
+        ls, le = edges("london")
+        ns, ne = edges("ny")
+        if label is SessionLabel.OVERLAP:
+            return max(ls, ns), min(le, ne)
+        if label is SessionLabel.LONDON:
+            return ls, min(ns, le)
+        if label is SessionLabel.NY:
+            return max(le, ns), ne
+        return None
+
+    def session_progress(self, ts: datetime) -> float:
+        """Fraction through the labelled session span, 0-1. NaN when OFF."""
+        b = self.session_bounds(ts)
+        if b is None:
+            return float("nan")
+        start, end = b
+        span = (end - start).total_seconds()
+        if span <= 0:
+            return float("nan")
+        return min(max((ts - start).total_seconds() / span, 0.0), 1.0)
+
     def session_label(self, ts: datetime) -> "SessionLabel":
         """Which intraday session ``ts`` falls in. DST-aware by construction."""
         require_utc(ts)

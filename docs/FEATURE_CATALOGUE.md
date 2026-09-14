@@ -1,6 +1,6 @@
 # Feature catalogue
 
-Generated from code. 58 features over 134,687 M15 bars, 80,317 rows complete on every feature.
+Generated from code. 58 features over 134,687 M15 bars, 67,088 rows complete on every feature.
 
 | # | feature | group | null % | warm-up bars | min | mean | max |
 |---:|---|---|---:|---:|---:|---:|---:|
@@ -34,7 +34,7 @@ Generated from code. 58 features over 134,687 M15 bars, 80,317 rows complete on 
 | 28 | `session_london` | session | 0.00 | 0 | 0.0000 | 0.2153 | 1.0000 |
 | 29 | `session_ny` | session | 0.00 | 0 | 0.0000 | 0.2330 | 1.0000 |
 | 30 | `session_overlap` | session | 0.00 | 0 | 0.0000 | 0.1557 | 1.0000 |
-| 31 | `session_progress` | session | 0.00 | 0 | 0.0000 | 0.2769 | 0.7188 |
+| 31 | `session_progress` | session | 13.44 | 4 | 0.0000 | 0.4739 | 0.9583 |
 | 32 | `tod_cos` | session | 0.00 | 0 | -1.0000 | -0.0375 | 1.0000 |
 | 33 | `tod_sin` | session | 0.00 | 0 | -1.0000 | 0.0279 | 1.0000 |
 | 34 | `adx_14` | trend | 0.02 | 26 | 0.0565 | 0.2564 | 0.7759 |
@@ -69,26 +69,30 @@ Flagged only. No selection happens here; that belongs inside walk-forward folds 
 
 | a | b | r |
 |---|---|---:|
-| `cost_to_atr_ratio` | `spread_to_atr` | +0.9959 |
-| `gk_vol_14` | `parkinson_14` | +0.9925 |
-| `twap_dist_atr` | `vwap_dist_atr` | +0.9907 |
-| `ema_dist_20_atr` | `rsi_14` | +0.9776 |
-| `atr_pct` | `gk_vol_14` | +0.9535 |
-| `atr_pct` | `parkinson_14` | +0.9501 |
-| `ema_dist_200_atr` | `ema_slope_200_atr` | +0.9501 |
-| `ema_dist_50_atr` | `rsi_14` | +0.9481 |
-| `ema_dist_50_atr` | `rsi_50` | +0.9446 |
-| `volume_rel_median_500` | `volume_z_500` | +0.9393 |
-| `di_diff_14` | `rsi_14` | +0.9366 |
-| `parkinson_14` | `rv_20` | +0.9243 |
-| `di_diff_14` | `ema_dist_20_atr` | +0.9209 |
-| `atr_ratio_14_200` | `atr_ratio_14_50` | +0.9198 |
-| `ema_slope_20_atr` | `rsi_14` | +0.9186 |
-| `atr_pct` | `rv_20` | +0.9123 |
-| `di_diff_14` | `ema_dist_50_atr` | +0.9088 |
-| `spread_rel_median_500` | `spread_z_500` | +0.9083 |
-| `donchian_pos_96` | `rsi_50` | +0.9071 |
-| `atr_pct_rank_1y` | `rv_pct_rank_1y` | +0.9065 |
-| `ema_slope_50_atr` | `rsi_50` | +0.9062 |
-| `ema_dist_200_atr` | `rsi_50` | +0.9057 |
-| `di_diff_14` | `ema_slope_20_atr` | +0.9023 |
+| `cost_to_atr_ratio` | `spread_to_atr` | +0.9957 |
+| `gk_vol_14` | `parkinson_14` | +0.9919 |
+| `twap_dist_atr` | `vwap_dist_atr` | +0.9906 |
+| `ema_dist_20_atr` | `rsi_14` | +0.9785 |
+| `ema_dist_50_atr` | `rsi_14` | +0.9537 |
+| `atr_pct` | `gk_vol_14` | +0.9537 |
+| `atr_pct` | `parkinson_14` | +0.9499 |
+| `ema_dist_50_atr` | `rsi_50` | +0.9468 |
+| `ema_dist_200_atr` | `ema_slope_200_atr` | +0.9433 |
+| `di_diff_14` | `rsi_14` | +0.9378 |
+| `volume_rel_median_500` | `volume_z_500` | +0.9348 |
+| `mins_to_rollover` | `tod_sin` | +0.9255 |
+| `di_diff_14` | `ema_dist_20_atr` | +0.9239 |
+| `parkinson_14` | `rv_20` | +0.9210 |
+| `ema_slope_20_atr` | `rsi_14` | +0.9195 |
+| `atr_ratio_14_200` | `atr_ratio_14_50` | +0.9147 |
+| `di_diff_14` | `ema_dist_50_atr` | +0.9143 |
+| `atr_pct` | `rv_20` | +0.9101 |
+| `ema_dist_200_atr` | `rsi_50` | +0.9097 |
+| `donchian_pos_96` | `rsi_50` | +0.9077 |
+| `ema_dist_20_atr` | `ema_dist_50_atr` | +0.9063 |
+| `ema_slope_50_atr` | `rsi_50` | +0.9049 |
+| `di_diff_14` | `ema_slope_20_atr` | +0.9036 |
+| `ema_dist_50_atr` | `ema_slope_20_atr` | +0.9028 |
+| `session_london` | `tod_sin` | +0.9009 |
+| `ema_slope_50_atr` | `roc_atr_48` | +0.9007 |
+| `spread_rel_median_500` | `spread_z_500` | +0.9006 |

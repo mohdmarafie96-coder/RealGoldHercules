@@ -221,8 +221,12 @@ def session_time(ts: Sequence[datetime], calendar) -> dict[str, F]:
         sid[i] = run
         if f"session_{lab}" in out:
             out[f"session_{lab}"][i] = 1.0
-        prog[i] = min((t - run_start).total_seconds() / (8 * 3600.0), 1.0) \
-            if run_start is not None else np.nan
+        # denominator comes from the CONFIGURED session span, not a hardcoded
+        # 8h and not the observed run length. An 8h constant gave asian a max
+        # of 0.7188 (6h/8h) and london 0.5938, because overlap carves the
+        # middle out of london and ny so labelled spans are shorter than the
+        # configured windows.
+        prog[i] = calendar.session_progress(t)
         nxt = calendar.next_rollover(t)
         to_roll[i] = (nxt - t).total_seconds() / 86400.0
         ang = 2 * np.pi * t.weekday() / 7.0
