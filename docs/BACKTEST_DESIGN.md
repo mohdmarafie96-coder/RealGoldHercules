@@ -149,6 +149,59 @@ state, and filling it with a number would tell the model something false.
 Any model that cannot take nulls natively must be given an explicit missingness
 indicator alongside the filled column, never a silent fill.
 
+### 0.2d Phase 7 cost constraints
+
+Three constraints, all verified against the 69-month series in
+`data/_reports/cost_to_atr_monthly.txt`.
+
+**1. Report BOTH gross and net expectancy per fold.**
+
+Cost drag fell 39.8% across the sample, concentrated in 2024H2 onward. If gross
+expectancy is flat across folds while net improves, the edge never changed and
+only costs did. That distinction is invisible from net alone, and it is exactly
+the conclusion a late-fold improvement would otherwise invite. Every fold report
+carries gross ATR-unit expectancy, net ATR-unit expectancy, and the fold's mean
+`cost_to_atr_ratio`.
+
+**2. The mechanism: spread is partially sticky and does not scale with vol.**
+
+| Year | ATR(14) | Mean spread | cost / ATR |
+|---|---:|---:|---:|
+| 2021 | 2.173 | 0.3648 | 0.2226 |
+| 2022 | 2.362 | 0.3813 | 0.2145 |
+| 2023 | 2.085 | 0.3443 | 0.2228 |
+| 2024 | 2.956 | 0.3938 | 0.1762 |
+| 2025 | 5.686 | 0.6327 | 0.1455 |
+| 2026 | 11.694 | 0.7678 | 0.0822 |
+
+ATR grew **5.38x** while spread grew only **2.10x**. Trading did not get cheaper
+in absolute terms; it got cheaper relative to the size of the moves available,
+because the denominator ran away from the numerator.
+
+**3. Extrapolation risk: the cheap months were bought with volatility, and
+volatility mean-reverts.**
+
+The cheapest months in the sample reached that state through a volatility spike,
+not through narrower spreads. Holding the current spread of 0.77 and varying ATR:
+
+| Hypothetical ATR | cost / ATR |
+|---:|---:|
+| 10.0 (2026 level) | 0.0828 |
+| 8.0 | 0.1035 |
+| 5.0 | 0.1656 |
+| 3.0 | 0.2759 |
+| 2.0 (2021-23 level) | 0.4139 |
+
+If ATR reverts to 5 with spread sticky at 0.77, cost/ATR returns to 0.1656,
+roughly the 2024 level. If it reverts all the way to the 2021-23 norm near 2.2,
+cost/ATR reaches **0.41, worse than any month in the entire sample**, because
+spread would stay elevated while the moves shrink.
+
+**Nothing downstream may assume 2026 cost economics persist.** Any strategy
+whose viability depends on cost/ATR below roughly 0.15 is betting on sustained
+high volatility, not on its own edge, and must be stress-tested at the 2021-23
+cost regime before it is believed.
+
 ### 0.2a Walk-forward must use an EXPANDING window
 
 The volatility regime range across the history is more than 5x, from 8.6% to

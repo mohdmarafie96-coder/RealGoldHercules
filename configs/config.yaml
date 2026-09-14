@@ -85,6 +85,35 @@ costs:
   # Effective slippage = max(slippage_per_side, price * slippage_bps / 10000).
   slippage_bps: 0.0
 
+# Triple-barrier labelling. Barriers in ATR, never dollars.
+#
+# Defaults chosen by measurement, not convention. A 1.0 ATR stop on M15 gives a
+# MEDIAN HOLD OF 3 BARS (45 minutes) with only 3.9% of labels inside the stated
+# 4-12h window: the stop is hit long before the thesis plays out. Sweep over the
+# full history:
+#
+#   stop/target   median bars   in 16-48 bars   stop-outs
+#     1.0 / 1.5         3            3.9%         60.6%
+#     2.0 / 3.0         9           28.0%         49.0%
+#     3.0 / 4.5        16           50.2%         40.9%
+#     4.0 / 6.0        21           63.6%         33.6%   <- default
+#     5.0 / 7.5        26           71.4%         27.4%
+#     6.0 / 9.0        30           76.0%         21.9%
+#
+# 4.0/6.0 centres the holding period in the window (p25 11, p75 35 bars) while
+# keeping the stop binding on a third of labels. Wider barriers push the exit
+# decision onto the time limit, which makes the stop decorative.
+labeling:
+  target_atr: 6.0
+  stop_atr: 4.0
+  max_bars: 48                 # 12h at M15
+  min_bars: 16                 # 4h at M15
+  atr_period: 14
+
+walk_forward:
+  n_folds: 6
+  embargo_bars: 96             # one trading day, on top of purging
+
 join:
   context:
     key: publication_time      # the only legal value
