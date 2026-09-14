@@ -1,0 +1,360 @@
+================================================================================
+PHASE 6 LABELLING -- OUTPUTS, TABLES AND PHASE 7 PRE-CONDITIONS
+XAUUSD signal research system
+branch: claude/xauusd-data-layer-6d9eg8
+================================================================================
+
+STATUS KEY
+  [COMPUTED]  measured from the materialised labels over the full history
+  [DERIVED]   arithmetic on a [COMPUTED] quantity, no new measurement
+  [PENDING]   not yet computed; requires a run. NOT estimated below.
+  [BLOCKED]   requires the tick slice, which is incomplete
+
+
+================================================================================
+SECTION 0 -- RUN CONFIGURATION
+================================================================================
+
+  barrier geometry        stop 4.0 ATR / target 6.0 ATR
+  horizon cap             max_bars 48 (12h at M15), min_bars 16 (4h)
+  atr_period              14
+  slippage_per_side       0.03 (from configs/config.yaml; no dataclass default)
+  entry                   next bar's open; buy at ask, sell at bid
+  exit side               long exits on bid, short exits on ask
+  intrabar ambiguity      pessimistic -- stop wins, and the label is flagged
+  forced exit             capped at the session rollover, as the engine caps it
+  gross definition        mid-to-mid (before spread AND before slippage)
+
+  materialised to         data/labels_m15/symbol=XAUUSD/year=/month=/
+  extra column            sample_weight (inverse-concurrency uniqueness)
+  test suite              187 passing
+
+
+================================================================================
+SECTION 1 -- GEOMETRY SWEEP PROVENANCE
+================================================================================
+
+QUESTION ASKED
+  Confirm the 4.0/6.0 sweep optimised hold-duration fit ONLY and never touched
+  expectancy, P&L, or label predictiveness. If it touched returns at any point,
+  it is a full-sample fit and needs redoing inside folds.
+
+ANSWER
+  The clean confirmation CANNOT be given. A return column was visible during
+  selection.
+
+THE SWEEP OUTPUT AS PRINTED (selected row)          [COMPUTED]
+
+   stop  target  median   p25   p75  in 16-48  stop%  net ATR     g-n
+    4.0     6.0      21    11    35     63.6%  33.6%  -0.1420  0.2009
+
+  The 'net ATR' column was on screen at the moment of selection.
+
+WHAT THE STATED CRITERION WAS
+  Recorded in configs/config.yaml: hold-duration fit (median inside the 4-12h
+  window, maximise the fraction of labels landing in 16-48 bars) plus keeping
+  the stop binding rather than vestigial.
+
+WHAT WAS NEVER COMPUTED
+  - no expectancy test against candidate geometries
+  - no P&L ranking of candidates
+  - no predictiveness / information-coefficient measurement
+  - no model, no feature-to-label correlation, no scoring of any kind
+
+EVIDENCE BEARING ON CONTAMINATION
+  The selected row is NOT the net-ATR maximum of the sweep. Wider geometries
+  all showed less negative net, because a fixed cost is a smaller fraction of a
+  bigger barrier. A return-maximising search would have pushed further out than
+  4/6 rather than stopping there. This is weak evidence, not proof.
+
+EXPOSURE, STATED PLAINLY
+  A full-sample return quantity was in the room during a selection whose stated
+  criterion was duration. The contamination channel is operator judgement, not
+  an algorithm. That is a judgement the operator cannot certify about himself.
+
+RECOMMENDATION
+  Fix the geometry a priori from the stated holding period and never sweep it.
+  4.0/6.0 has a justification that needs no data at all: see Section 3 -- it is
+  the geometry whose breakeven sits at 40% with 1.5 R:R and which is least
+  sensitive to the cost regime. Duration fit can then be REPORTED per fold
+  rather than SELECTED on.
+
+
+================================================================================
+SECTION 2 -- LABEL DISTRIBUTION
+================================================================================
+
+2a. HEADLINE                                         [COMPUTED]
+
+  labelled bars          134,687 total / 134,673 labelled per side
+
+  LONG   net   -0.1420 ATR   gross  +0.0589 ATR   cost 0.2009 ATR
+         median hold 21 bars          in 4-12h window 63.6%
+  SHORT  net   -0.2554 ATR   gross   -0.0546 ATR   cost 0.2008 ATR
+         median hold 21 bars          in 4-12h window 63.9%
+
+  concurrency  mean 28.4   max 49   ->  effective n ~= 4,744
+
+
+2b. EXIT-REASON SPLIT                                [COMPUTED]
+
+  reason           long        %        short        %
+  ------------------------------------------------------
+  stop           45,194    33.56       45,254    33.60
+  target         23,013    17.09       23,303    17.30
+  rollover       48,859    36.28       49,777    36.96
+  time (48-bar)  17,599    13.07       16,331    12.13
+  end_of_data         8     0.01            8     0.01
+  ------------------------------------------------------
+  total         134,673   100.00      134,673   100.00
+
+
+2c. THE THREE-WAY FRAMING                            [DERIVED from 2b]
+
+  barrier-resolved   50.65%   (stop 33.56 + target 17.09)
+  rollover-capped    36.28%
+  48-bar-capped      13.07%
+
+  NOTE: the requested three-way split does not name 'rollover', which is a
+  distinct category from 'time' in this labeller. Both are non-barrier exits,
+  but they have different causes and different biases.
+
+
+2d. THE FINDING THAT MATTERS MOST FOR PHASE 7
+
+  Nearly half of all labels (49.35%) never touch a barrier. Of those,
+  74% are cut by the DAILY ROLLOVER, not by the 48-bar horizon.
+
+  So for a plurality of samples the label means "what the position was worth at
+  the forced session close", not "which barrier hit first". This is faithful to
+  the engine -- the engine does force-exit at rollover -- but it means the
+  target is substantially a TIME-OF-DAY-CONDITIONED return.
+
+  A signal fired at 06:00 UTC has a 60+ bar runway.
+  A signal fired at 19:00 UTC has about four bars and is nearly always a
+  rollover label.
+
+  The model will read that asymmetry as signal unless it is handled.
+
+
+2e. BARRIER ASYMMETRY                                [DERIVED from 2b]
+
+  stop share among barrier-resolved labels (long):
+        45,194 / (45,194 + 23,013) = 66.3%
+
+  theoretical stop share, driftless walk, barriers at -4 / +6:
+        6 / (4 + 6) = 60.0%
+
+  excess: 6.3 percentage points
+
+  Three contributors, in what is believed to be descending order of size:
+
+    1. TRUNCATION BIAS. The target sits 1.5x further away, so target-bound
+       paths take longer and are preferentially removed by the rollover and
+       48-bar caps. This inflates the stop share among RESOLVED labels with no
+       market asymmetry whatsoever. It is a labelling artifact and it
+       interacts with time of day.
+    2. PESSIMISTIC INTRABAR RESOLVER. Ambiguous bars are assigned the stop by
+       construction. Size unmeasured -- see Section 6.
+    3. COSTS, which move the entry against the position by ~0.20 ATR round
+       trip.
+
+
+2f. STILL OUTSTANDING FROM THIS ITEM                 [PENDING]
+
+  - time-exit P&L distribution in ATR units
+  - class balance by year
+  - effective sample per year after uniqueness weighting
+
+  These are NOT estimated here. The pooled uniqueness ratio is 0.0352
+  (4,744 / 134,673), but concurrency is not uniform across years: holding time
+  tracks ATR, which ran 2.17 to 11.69 over the sample, so high-volatility years
+  resolve faster and carry more effective weight per bar than the pooled ratio
+  implies. A per-year figure derived from the pooled mean would be fabricated.
+  These require a run over the materialised labels.
+
+
+2g. FLAGGED CHANGES ARISING (additions / removals, per standing instruction)
+
+  ADDITION (proposed): carry label_bars and label_reason into the phase 7 fold
+  reporting so per-fold performance can be decomposed by exit type. Without it,
+  a model that has only learned "enter early in the session" will present as
+  edge.
+
+  REMOVAL (proposed, unmeasured): consider masking labels whose runway to the
+  rollover is shorter than min_bars (16). At present a bar four hours before
+  rollover receives a label describing a four-bar trade, which sits outside the
+  stated holding period. Affects roughly the last 16 bars of each session;
+  exact count NOT measured. Not applied without sign-off.
+
+
+================================================================================
+SECTION 3 -- DESIGN DOC 0.2d, RECALIBRATED TO BREAKEVEN-SHIFT FRAMING
+================================================================================
+
+3a. THE GENERAL FORM                                 [DERIVED]
+
+  For stop S (ATR), target T (ATR), round-trip cost c (ATR):
+
+      win  = T - c
+      loss = S + c
+
+      breakeven win rate = (S + c) / ((T - c) + (S + c))
+                         = (S + c) / (S + T)
+
+  The cost CANCELS from the denominator -- it moves the win and the loss in
+  opposite directions by the same amount. So sensitivity to the cost regime is
+  a constant that depends only on the total barrier width:
+
+      d(breakeven)/dc = 1 / (S + T)
+
+
+3b. AT 4.0 / 6.0 ATR  (S + T = 10)                   [DERIVED]
+
+  sensitivity: 10 percentage points of breakeven per 1.0 ATR of cost
+
+  cost regime                           c (ATR)    R:R     breakeven
+  ---------------------------------------------------------------------
+  2026, lowest observed                   0.08    1.451       40.8%
+  observed pooled (measured gross-net)    0.2009  1.380       42.0%
+  high-cost tail                          0.41    1.268       44.1%
+  ---------------------------------------------------------------------
+  shift across the full observed cost range:              3.3 pp
+
+  Not a cliff.
+
+
+3c. CONTRAST: 1.0 / 1.5 ATR  (S + T = 2.5)           [DERIVED]
+
+  This was the geometry tested before the duration sweep. It gave 3-bar median
+  holds (45 min against a stated 4-12h window) and was rejected on duration.
+
+  sensitivity: 40 percentage points of breakeven per 1.0 ATR of cost -- 4x
+
+  cost regime                           c (ATR)    R:R     breakeven
+  ---------------------------------------------------------------------
+  2026, lowest observed                   0.08    1.315       43.2%
+  observed pooled                         0.2009  1.082       48.0%
+  high-cost tail                          0.41    0.773       56.4%
+  ---------------------------------------------------------------------
+  shift across the full observed cost range:             13.2 pp
+
+  At the high-cost end the reward-to-risk falls BELOW 1.0 (0.773) and the
+  required accuracy exceeds 56%.
+
+
+3d. WHAT THIS INVERTS
+
+  The CURRENT text of 0.2d treats the ATR-vs-spread divergence (ATR grew 5.38x
+  while spread grew 2.10x) as an extrapolation hazard: a model fitted in the
+  cheap recent regime failing if costs revert.
+
+  Under the breakeven framing that hazard is BOUNDED AND SMALL, precisely
+  BECAUSE the barriers are wide. Full reversion to the worst observed cost
+  regime costs 3.3pp of required accuracy -- inside the range a genuine edge
+  should survive.
+
+  The wide barriers are not a concession to the cost problem. They are the
+  solution to it.
+
+
+3e. THE RESIDUAL RISK, RESTATED NARROWLY
+
+  The real exposure is not that a cost reversion breaks the strategy. It is
+  that FOLD-LEVEL NET PERFORMANCE IS NOT COMPARABLE ACROSS FOLDS when the cost
+  regime differs by a factor of five.
+
+  Fold 0 (2021, c ~ 0.22) and fold 5 (2026, c ~ 0.08) are not measuring the
+  same thing.
+
+  Supporting series, cost_to_atr_ratio annual means:      [COMPUTED, earlier]
+      2021  0.2221
+      2022  0.2147
+      2023  0.2224
+      2024  0.1767
+      2025  0.1456
+      2026  0.0825
+
+  The decline is CONCENTRATED, not gradual:
+      OLS slope pre-2024-07   -0.000287 / month
+      OLS slope post-2024-07  -0.004473 / month
+      ratio                    15.6x
+
+  FIX: report gross AND net per fold, and additionally report each fold's
+  realised c, so a net improvement across folds can be attributed to edge or to
+  cost decay. This requirement already exists in 0.2b; 0.2d should point at it
+  rather than raise a separate extrapolation alarm.
+
+
+================================================================================
+SECTION 4 -- CONSTRAINT 0.2e, MODEL CAPACITY (to be recorded in BACKTEST_DESIGN)
+================================================================================
+
+  0.2e -- MODEL CAPACITY IS SET BY EFFECTIVE SAMPLE PER FOLD, NOT BAR COUNT.
+
+  Labels overlap heavily: mean concurrency 28.4, max 49. The uniqueness-
+  weighted effective sample over the full 134,673-label history is ~4,744, a
+  ratio of 0.0352.
+
+  Per expanding fold, the 22,448-bar test window carries on the order of 790
+  effective observations, and fold 0's 22,351-bar training window carries about
+  the same. (These per-fold figures assume uniform uniqueness and are therefore
+  OPTIMISTIC; the measured per-fold values are [PENDING], see 2f.)
+
+  Against roughly 15-20 independent dimensions in the 58-feature set, fold 0
+  trains at an effective sample-to-dimension ratio near 40:1.
+
+  THEREFORE: shallow trees, strong regularisation, min_child_samples sized
+  against effective n rather than row count, and EFFECTIVE N REPORTED FOR EVERY
+  FOLD alongside every performance number. A fold whose effective n cannot
+  support the model's capacity is reported as underpowered, never quietly
+  averaged into the headline.
+
+
+================================================================================
+SECTION 5 -- WALK-FORWARD FOLD STRUCTURE AS BUILT
+================================================================================
+
+  6 expanding folds, embargo 96 bars, purged by label_exit_index  [COMPUTED]
+
+  fold    train      test    purged   embargoed
+  ----------------------------------------------
+    0    22,351    22,448        18          78
+    1    44,799    22,448        24          72
+    2    67,247    22,448        48          48
+    3    89,695    22,448        43          53
+    4   112,143    22,448        38          58
+  ----------------------------------------------
+
+  Training EXPANDS and never slides -- required by 0.2a, because volatility
+  regimes cluster (the three most volatile months are consecutive:
+  2026-01, 2026-02, 2026-03).
+
+  Enforced by tests:
+    test_folds_expand_and_never_roll
+    test_purging_removes_train_labels_that_reach_into_test
+    test_embargo_drops_a_further_margin
+    test_test_windows_are_contiguous_and_disjoint
+
+
+================================================================================
+SECTION 6 -- OPEN ITEMS AND BLOCKERS
+================================================================================
+
+  [PENDING]  time-exit P&L distribution in ATR units
+  [PENDING]  class balance by year
+  [PENDING]  effective sample per year after uniqueness weighting
+  [PENDING]  exact count of labels with sub-16-bar runway to rollover (2g)
+
+  [BLOCKED]  PESSIMISTIC-RESOLVER BIAS, unmeasured.
+             Requires the 6-month tick validation slice. Current state:
+             2026-01 partially downloaded, three months not started, download
+             restarted. Until it lands, every net figure in this document
+             carries an unquantified DOWNWARD bias whose size can be bounded by
+             argument but not by measurement.
+             Recommendation: treat phase 7 results as provisional until the
+             measurement exists, then re-run the fold report.
+
+================================================================================
+END
+================================================================================
