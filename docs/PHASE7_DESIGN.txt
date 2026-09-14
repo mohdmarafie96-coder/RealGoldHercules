@@ -426,6 +426,67 @@ C.0  KILL CRITERIA -- PRE-REGISTERED 2026-09-14, BEFORE ANY FIT
   edge is not there at a size this sample can see, and that result is the
   honest report.
 
+  POWER -- added 2026-09-14, before attempt 1, so a FAIL is interpretable.
+
+  THE ECONOMIC FLOOR AND THE DETECTION FLOOR ARE THE SAME NUMBER.
+    Bonferroni threshold at 100% coverage   2.128 * 0.0731 = 0.1556 ATR
+    economic floor, condition 2                            = 0.1500 ATR
+  Same number to within 0.006 ATR, by coincidence not design. THIS SAMPLE SITS
+  EXACTLY AT THE EDGE OF USEFULNESS FOR THE EFFECT SIZE BEING SOUGHT. There is
+  no margin between "big enough to matter" and "big enough to see".
+
+  POWER BY SIMULATION (200,000 draws; four folds ~ N(mu, SE_fold); pooled is
+  their mean, which reproduces the measured SE_pooled 0.0731 exactly)
+
+    cov   SE_fold  SE_pool     mu |     c1     c2     c3     c4    JOINT
+    ---------------------------------------------------------------------
+   100%    0.1463   0.0731  +0.15 |  47.1%  50.1%  88.7%  99.6%    46.8%
+   100%                     +0.22 |  81.1%  83.2%  97.6%  99.9%    80.9%
+    50%    0.2068   0.1034  +0.15 |  25.0%  50.0%  76.3%  94.2%    24.8%
+    50%                     +0.30 |  78.0%  92.6%  97.1%  99.3%    77.7%
+    25%    0.2925   0.1463  +0.15 |  13.4%  49.9%  64.3%  77.5%    13.1%
+    25%                     +0.30 |  46.8%  84.7%  88.8%  92.1%    46.0%
+
+  A REAL EDGE AT THE +0.15 ECONOMIC FLOOR FAILS THIS TEST BETWEEN 53% AND 87%
+  OF THE TIME, depending on how selective the model turns out to be.
+
+  Power is dominated by conditions 1 and 2, which are near-perfectly
+  correlated. Conditions 3 and 4 add almost nothing at full coverage and bite
+  only when coverage is low.
+
+  CONDITION 2 IS NOT A STATISTICAL TEST. At a true edge of exactly +0.15 its
+  power is 50.0% BY CONSTRUCTION -- it asks whether a point estimate lands
+  above its own expected value. It is an economic filter and must never be
+  read as evidence.
+
+  EDGE REQUIRED FOR 80% JOINT POWER -- what this sample can actually adjudicate
+
+    coverage    mu for 80% joint power
+    -----------------------------------
+       100%              +0.217
+        50%              +0.309
+        25%              +0.439
+
+  HOW A FAIL MUST BE WRITTEN UP
+
+    A FAIL MEANS:
+      "No edge above roughly 0.25 ATR was demonstrated on this sample."
+
+    A FAIL DOES NOT MEAN:
+      "No edge exists."
+
+  BOTH STATEMENTS GO IN THE FINAL REPORT, ADJACENT, IN THAT ORDER. A FAIL at
+  this power is not proof of absence and must never be written up as one. A
+  point estimate that is positive but short of the threshold is UNDERPOWERED,
+  not REFUTED, and the realised coverage is quoted beside it so the reader can
+  place it in the table above.
+
+  THE UNCOMFORTABLE COROLLARY, recorded deliberately: a PASS on this sample
+  requires an edge large enough that its absence in the literature would be
+  surprising. That asymmetry is a property of 2,863 effective observations
+  against a label sd of 3.91, not of the method, and no amount of modelling
+  removes it.
+
   COVERAGE FLOOR 20%. Below it the effective n is under 573 and the minimum
   detectable effect (+0.348 ATR) exceeds anything the label distribution can
   plausibly deliver. Such a run is reported as UNTESTABLE, not as a result,

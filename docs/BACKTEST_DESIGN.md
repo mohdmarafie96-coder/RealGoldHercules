@@ -415,6 +415,72 @@ Not "try a different model family", not "revisit the features" — the walk-
 forward says the edge is not there at a size this sample can see, and the
 honest report is that result.
 
+**POWER — added 2026-09-14, before attempt 1, so that a FAIL is interpretable.**
+
+*The economic floor and the detection floor are the same number.* At 100%
+coverage the Bonferroni threshold is `2.128 × 0.0731 = 0.1556 ATR`, and the
+economic floor in condition 2 is `+0.15 ATR`. **These are the same number to
+within 0.006 ATR, by coincidence rather than design.** State it plainly: *this
+sample sits exactly at the edge of usefulness for the effect size being
+sought.* There is no margin between "big enough to matter" and "big enough to
+see".
+
+Power by simulation, 200,000 draws, four folds each `N(μ, SE_fold)` with the
+pooled estimate their mean (equal effective n per fold, so `SE_pooled =
+SE_fold / 2` — which reproduces the measured 0.0731 exactly):
+
+| coverage | SE_fold | SE_pooled | true edge μ | cond 1 | cond 2 | cond 3 | cond 4 | **JOINT** |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 100% | 0.1463 | 0.0731 | +0.15 | 47.1% | 50.1% | 88.7% | 99.6% | **46.8%** |
+| 100% | | | +0.22 | 81.1% | 83.2% | 97.6% | 99.9% | **80.9%** |
+| 50% | 0.2068 | 0.1034 | +0.15 | 25.0% | 50.0% | 76.3% | 94.2% | **24.8%** |
+| 50% | | | +0.30 | 78.0% | 92.6% | 97.1% | 99.3% | **77.7%** |
+| 25% | 0.2925 | 0.1463 | +0.15 | 13.4% | 49.9% | 64.3% | 77.5% | **13.1%** |
+| 25% | | | +0.30 | 46.8% | 84.7% | 88.8% | 92.1% | **46.0%** |
+
+**A real edge sitting at the +0.15 economic floor fails this test between 53%
+and 87% of the time**, depending on how selective the model turns out to be.
+Power is dominated by conditions 1 and 2, which are near-perfectly correlated —
+condition 3 and condition 4 add almost nothing at full coverage and bite only
+when coverage is low.
+
+Condition 2 deserves its own note: at a true edge of exactly +0.15 its power is
+**50.0% by construction**, because it asks whether a point estimate lands above
+its own expected value. It is an economic filter, not a statistical test, and
+it should never be read as one.
+
+*The edge required for 80% joint power*, which is what this sample can actually
+adjudicate:
+
+| coverage | μ for 80% joint power |
+|---:|---:|
+| 100% | **+0.217** |
+| 50% | **+0.309** |
+| 25% | **+0.439** |
+
+**THEREFORE — how a FAIL must be written up.**
+
+A FAIL means:
+
+> **No edge above roughly 0.25 ATR was demonstrated on this sample.**
+
+A FAIL does **not** mean:
+
+> ~~No edge exists.~~
+
+**Both statements go in the final report, adjacent, in that order.** A FAIL at
+this power is not proof of absence and must never be written up as one. If
+attempt 1 returns a point estimate that is positive but short of the threshold,
+the honest description is *underpowered*, not *refuted*, and the realised
+coverage must be quoted beside it so the reader can place it in the table
+above.
+
+The corollary is uncomfortable and is recorded deliberately: **a PASS on this
+sample requires an edge large enough that its absence in the literature would
+be surprising.** That asymmetry is a property of 2,863 effective observations
+against a label sd of 3.91, not of the method, and no amount of modelling
+removes it.
+
 **Coverage floor: 20%.** A model taking fewer than 20% of test bars produces
 an effective n under 573, where the minimum detectable effect (+0.348 ATR)
 exceeds anything the label distribution can plausibly deliver. Such a run is
