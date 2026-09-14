@@ -65,6 +65,15 @@ def build_views(
             """)
             made.append(name)
 
+        if has("features_m15/**/*.parquet"):
+            con.execute(f"""
+                CREATE OR REPLACE VIEW ml_features_m15 AS
+                SELECT * FROM read_parquet(
+                    '{data_root}/features_m15/symbol=*/**/*.parquet',
+                    hive_partitioning := true)
+            """)
+            made.append("ml_features_m15")
+
         if has("context/**/*.parquet"):
             con.execute(f"""
                 CREATE OR REPLACE VIEW context AS
