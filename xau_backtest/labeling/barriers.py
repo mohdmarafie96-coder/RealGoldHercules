@@ -60,12 +60,14 @@ _REASON_CODE: Final[dict[LabelReason, int]] = {
 class BarrierConfig:
     """All barriers in ATR units. Never dollars."""
 
-    target_atr: float = 1.5
-    stop_atr: float = 1.0
+    target_atr: float
+    stop_atr: float
+    slippage_per_side: float        # REQUIRED: no default. A cost assumption
+                                    # must not be able to hide as a dataclass
+                                    # default, same rule as add_cost_features.
     max_bars: int = 48              # 12h at M15, the top of the holding window
     min_bars: int = 16              # 4h, the bottom
     atr_period: int = 14
-    slippage_per_side: float = 0.03
 
     def __post_init__(self) -> None:
         if self.target_atr <= 0 or self.stop_atr <= 0:

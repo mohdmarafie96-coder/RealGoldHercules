@@ -60,8 +60,11 @@ def bars_from(mid: np.ndarray, spread: float = 0.40, wig: float = 0.5,
                      for k, v in cols.items()})
 
 
+SLIP = 0.03   # fixture value; production slippage comes from configs/config.yaml
+
+
 def bc(**kw):
-    base = dict(target_atr=6.0, stop_atr=4.0, max_bars=48, slippage_per_side=0.03)
+    base = dict(target_atr=6.0, stop_atr=4.0, max_bars=48, slippage_per_side=SLIP)
     base.update(kw)
     return BarrierConfig(**base)
 
@@ -133,7 +136,7 @@ def test_gross_minus_net_is_the_full_round_trip(cal, cfg):
     """Gross is mid-to-mid, so the difference must be spread + 2*slippage."""
     rng = np.random.default_rng(11)
     mid = 2300 + np.cumsum(rng.normal(0, 1.0, 1200))
-    spread, slip = 0.40, 0.03
+    spread, slip = 0.40, SLIP
     t = label_triple_barrier(bars_from(mid, spread=spread), calendar=cal,
                              cfg=bc(slippage_per_side=slip))
     for side in ("long", "short"):
