@@ -26,6 +26,7 @@ REPO = Path(__file__).resolve().parents[1]
 warnings.filterwarnings("ignore")
 
 STOP, TARGET, TIME, ROLLOVER = -1, 1, 0, 2
+SHORT_RUNWAY, NO_ENTRY = 8, 9
 
 
 @pytest.fixture(scope="module")
@@ -247,3 +248,63 @@ def test_test_windows_are_contiguous_and_disjoint():
             assert lo == prev_hi + 1, "test windows are not contiguous"
         prev_hi = hi
         assert np.intersect1d(f.train, f.test).size == 0
+
+
+# --- the min_bars runway mask ---------------------------------------------
+
+
+def test_short_runway_bars_emit_no_label(cal):
+    """A bar whose runway to the rollover is under min_bars must be masked.
+
+    Without this the labeller emits four-bar trades from bars late in the
+    session, which sit outside the stated 4-12h holding period AND make the
+    label a function of the clock: the runway shrinks monotonically towards
+    the session close.
+    """
+    rng = np.random.default_rng(21)
+    mid = 2300 + np.cumsum(rng.normal(0, 0.8, 3000))
+    t = label_triple_barrier(bars_from(mid), calendar=cal, cfg=bc(min_bars=16))
+    r = t["label_long_reason"].to_numpy(zero_copy_only=False)
+    nb = t["label_long_bars"].to_numpy(zero_copy_only=False)
+    assert (r == SHORT_RUNWAY).sum() > 0, "nothing was masked at all"
+    # a rollover-capped label is the one whose hold equals its whole runway,
+    # so it is the direct witness that the runway cleared min_bars
+    held = nb[r == ROLLOVER]
+    assert held.size and held.min() >= 16, (
+        f"a rollover label held {held.min()} bars, under min_bars"
+    )
+    assert (nb[r == SHORT_RUNWAY] == -1).all(), "a masked bar carries a hold"
+
+
+def test_masking_removes_labels_and_is_side_symmetric(cal):
+    rng = np.random.default_rng(23)
+    mid = 2300 + np.cumsum(rng.normal(0, 0.8, 3000))
+    loose = label_triple_barrier(bars_from(mid), calendar=cal, cfg=bc(min_bars=1))
+    tight = label_triple_barrier(bars_from(mid), calendar=cal, cfg=bc(min_bars=16))
+    rl = loose["label_long_reason"].to_numpy(zero_copy_only=False)
+    rt = tight["label_long_reason"].to_numpy(zero_copy_only=False)
+    assert (rt == SHORT_RUNWAY).sum() > 0
+    assert (rl == SHORT_RUNWAY).sum() == 0, "min_bars=1 must mask nothing"
+    # the mask only ever removes
+    assert set(np.flatnonzero(rt != NO_ENTRY)) <= set(np.flatnonzero(rl != NO_ENTRY))
+    for side in ("long", "short"):
+        a = tight[f"label_{side}_reason"].to_numpy(zero_copy_only=False)
+        assert np.array_equal(a == SHORT_RUNWAY, rt == SHORT_RUNWAY), (
+            f"{side} masked a different set of bars than long"
+        )
+
+
+def test_masking_cuts_rollover_exits_hardest(cal):
+    """The mask must bite on rollover labels, which is its whole purpose."""
+    rng = np.random.default_rng(27)
+    mid = 2300 + np.cumsum(rng.normal(0, 0.4, 4000))
+    loose = label_triple_barrier(bars_from(mid), calendar=cal, cfg=bc(min_bars=1))
+    tight = label_triple_barrier(bars_from(mid), calendar=cal, cfg=bc(min_bars=16))
+    rl = loose["label_long_reason"].to_numpy(zero_copy_only=False)
+    rt = tight["label_long_reason"].to_numpy(zero_copy_only=False)
+    roll_before, roll_after = int((rl == ROLLOVER).sum()), int((rt == ROLLOVER).sum())
+    time_before, time_after = int((rl == TIME).sum()), int((rt == TIME).sum())
+    assert roll_after < roll_before, "the mask removed no rollover labels"
+    assert time_after == time_before, (
+        "the mask removed a 48-bar time exit; it must only touch short runways"
+    )

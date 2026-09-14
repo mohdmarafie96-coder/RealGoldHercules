@@ -197,10 +197,152 @@ roughly the 2024 level. If it reverts all the way to the 2021-23 norm near 2.2,
 cost/ATR reaches **0.41, worse than any month in the entire sample**, because
 spread would stay elevated while the moves shrink.
 
-**Nothing downstream may assume 2026 cost economics persist.** Any strategy
-whose viability depends on cost/ATR below roughly 0.15 is betting on sustained
-high volatility, not on its own edge, and must be stress-tested at the 2021-23
-cost regime before it is believed.
+**4. What that reversion actually costs, in breakeven terms.**
+
+The three tables above were originally read as an extrapolation alarm. Under a
+breakeven-shift framing they are not. For a stop of `S` ATR, a target of `T`
+ATR and a round-trip cost of `c` ATR:
+
+```
+win  = T - c
+loss = S + c
+breakeven win rate = (S + c) / ((T - c) + (S + c)) = (S + c) / (S + T)
+```
+
+The cost **cancels from the denominator** — it moves the win and the loss in
+opposite directions by the same amount. So sensitivity to the cost regime is a
+constant set only by the total barrier width:
+
+```
+d(breakeven)/dc = 1 / (S + T)
+```
+
+At the pre-registered 4.0/6.0 geometry (`S + T = 10`), that is **10 percentage
+points of breakeven per 1.0 ATR of cost**:
+
+| cost regime | c (ATR) | R:R | breakeven |
+|---|---:|---:|---:|
+| 2026, lowest observed | 0.08 | 1.451 | 40.8% |
+| observed pooled (measured gross−net) | 0.2002 | 1.380 | 42.0% |
+| full reversion, spread sticky at 0.77 | 0.41 | 1.268 | 44.1% |
+
+A **3.3pp shift across the entire observed cost range.** Not a cliff.
+
+Contrast the 1.0/1.5 geometry rejected in phase 6 (`S + T = 2.5`), where the
+same reversion costs **13.2pp** and the reward-to-risk falls to 0.773:
+
+| cost regime | c (ATR) | R:R | breakeven |
+|---|---:|---:|---:|
+| 2026 | 0.08 | 1.315 | 43.2% |
+| pooled | 0.2002 | 1.082 | 48.0% |
+| full reversion | 0.41 | 0.773 | 56.4% |
+
+**This inverts constraint 3 rather than deleting it.** A cost reversion does not
+break a wide-barrier strategy; 3.3pp is inside the range a genuine edge should
+survive. What survives from constraint 3 is narrower and is really a restatement
+of constraint 1: **fold-level net performance is not comparable across folds**
+when `c` differs by a factor of five between fold 0 (2021, c≈0.22) and fold 4
+(2026, c≈0.08). Report gross, net, and the fold's realised `c`, so a net
+improvement can be attributed to edge or to cost decay. Stress-testing at the
+2021-23 regime stays mandatory; it is no longer expected to be fatal.
+
+### 0.2e Model capacity is set by EFFECTIVE sample, not bar count
+
+Labels overlap heavily. Measured on the full history after the `min_bars` mask:
+mean concurrency 27.0, max 49, **effective n 4,311** over 112,615 labels — a
+uniqueness ratio of 0.0383. The ratio is remarkably stable across years
+(0.0369–0.0391), so the pooled figure is safe to reason with.
+
+Per fold, from `data/_reports/label_report.txt`:
+
+| fold | train labels | train eff n | test labels | test eff n |
+|---:|---:|---:|---:|---:|
+| 0 | 18,678 | 730.9 | 18,781 | 714.0 |
+| 1 | 37,463 | 1,443.2 | 18,776 | 732.3 |
+| 2 | 56,239 | 2,177.3 | 18,771 | 733.3 |
+| 3 | 75,010 | 2,910.2 | 18,767 | 706.9 |
+| 4 | 93,777 | 3,615.6 | 18,761 | 690.8 |
+
+Against roughly 15–20 independent dimensions in the 58-feature set, fold 0
+trains at an effective sample-to-dimension ratio near **40:1**.
+
+Therefore: shallow trees, strong regularisation, `min_child_samples` sized
+against effective n rather than row count, and **effective n reported for every
+fold** beside every performance number. A fold whose effective n cannot support
+the model's capacity is reported as underpowered, never averaged into a
+headline.
+
+### 0.2f The benchmark is ALWAYS-LONG, never zero
+
+Gold ran 1868 to 4394 over the sample. Long labels are systematically better
+than short ones (pooled net −0.1315 vs −0.2467 ATR; gross +0.0688 vs −0.0466),
+and that gap **is the drift, not structure**. Neither side covers the 0.2002 ATR
+cost on its own, so "beats zero" looks like a real bar — but a model that learns
+*mostly long, sometimes flat* harvests the drift and presents as skill.
+
+Always-long through the identical folds, from `data/_reports/fold_benchmark.json`:
+
+| fold | AL net (ATR) | AL net, uniqueness-weighted | AL win % |
+|---:|---:|---:|---:|
+| 0 | −0.2963 | −0.2572 | 41.64 |
+| 1 | −0.3063 | −0.2350 | 40.21 |
+| 2 | **+0.1279** | **+0.2161** | 46.75 |
+| 3 | **+0.1294** | **+0.2221** | 48.23 |
+| 4 | −0.0370 | −0.0425 | 46.83 |
+
+Folds 2 and 3 pay **+0.22 ATR per trade for doing nothing but holding gold.**
+A model reporting +0.15 ATR on fold 3 has *lost* to buy-and-hold.
+
+**Constraint: every model result is reported alongside the always-long figure
+for the same fold, and the headline comparison is against that figure, not
+against zero.** The same applies to the phase-4 baselines.
+
+### 0.2g Fold 0 is feature-deficient and is reported separately
+
+Fold 0 is not merely a smaller sample — it is a **different feature space**. The
+four one-year percentile-rank features need 23,629 bars of history, and fold 0's
+training window is 18,678 labels. Measured null rates (train vs test):
+
+| feature | f0 train | f0 test | f1 train | f2 train | f3 train | f4 train |
+|---|---:|---:|---:|---:|---:|---:|
+| `atr_pct_rank_1y` | **100.0%** | 5.2% | 52.7% | 35.1% | 26.3% | 21.1% |
+| `rv_pct_rank_1y` | **100.0%** | 5.2% | 52.7% | 35.1% | 26.3% | 21.1% |
+| `range_pct_rank_1y` | **100.0%** | 5.2% | 52.7% | 35.1% | 26.3% | 21.1% |
+| `spread_pct_rank_1y` | **100.0%** | 5.2% | 52.7% | 35.1% | 26.3% | 21.1% |
+
+Fold 0 trains with those four features **entirely absent** and is then tested on
+a window where they are 94.8% populated. Nothing it learned can generalise to
+them, and LightGBM's null handling will have routed every training row down the
+missing branch.
+
+**Constraint: fold 0 is reported separately and never averaged into the
+headline.** Per-fold null rates for every feature are reported for every run;
+the full 58-feature table lives in `data/_reports/label_report.txt`. Any other
+feature whose train-minus-test null gap exceeds 10pp in a fold gets the same
+treatment. The next largest gap after the rank features is 2.2pp
+(`volume_z_500` and the other 500-bar relatives), which is immaterial.
+
+### 0.2h Barrier geometry is PRE-REGISTERED at 4.0 / 6.0 ATR
+
+The 4.0/6.0 geometry was chosen in phase 6 by a full-sample sweep whose stated
+criterion was hold-duration fit. A `net ATR` column was visible in that sweep's
+output. The selected row is not the sweep's net-ATR maximum — sensitivity
+`1/(S+T)` is monotonically decreasing in width, so a return-driven search would
+have pushed wider, not stopped at 4/6 — but the exposure is real and the
+argument in 0.2d cannot uniquely justify 4/6 either, for exactly that reason:
+it favours ever-wider barriers without bound. **Duration is the binding
+constraint, and duration is data-derived.**
+
+The resolution is pre-registration, not re-selection:
+
+1. **4.0 / 6.0 ATR is fixed now, before any phase 7 model is fitted.** It is not
+   re-swept, not tuned inside folds, and not revisited on the strength of a
+   result.
+2. **3.0/4.5 and 6.0/9.0 are reported in phase 7 as ROBUSTNESS CHECKS only.**
+   Both preserve the 1.5 R:R and bracket the pre-registered width. They are
+   never a selection set — no result may cause the headline geometry to change.
+3. **An edge present only at 4/6 is diagnostic of overfitting**, and is reported
+   as such rather than as a finding.
 
 ### 0.2a Walk-forward must use an EXPANDING window
 

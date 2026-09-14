@@ -108,6 +108,8 @@ class Config:
     join_key: str
     allow_exact_matches: bool
     quality: Mapping[str, Any]
+    labeling: Mapping[str, Any]
+    walk_forward: Mapping[str, Any]
     sessions: SessionConfig
     costs: CostConfig
     source_files: tuple[Path, ...] = field(default=())
@@ -235,6 +237,8 @@ def load_config(
         join_key=key,
         allow_exact_matches=bool(join.get("allow_exact_matches", False)),
         quality=raw.get("quality", {}) or {},
+        labeling=raw.get("labeling", {}) or {},
+        walk_forward=raw.get("walk_forward", {}) or {},
         sessions=session,
         costs=CostConfig(
             slippage_per_side=float(_req(raw.get("costs", {}) or {},

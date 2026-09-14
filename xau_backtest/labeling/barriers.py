@@ -47,12 +47,14 @@ class LabelReason(str, Enum):
     TIME = "time"
     ROLLOVER = "rollover"
     END_OF_DATA = "end_of_data"
+    SHORT_RUNWAY = "short_runway"
     NO_ENTRY = "no_entry"
 
 
 _REASON_CODE: Final[dict[LabelReason, int]] = {
     LabelReason.TARGET: 1, LabelReason.STOP: -1, LabelReason.TIME: 0,
-    LabelReason.ROLLOVER: 2, LabelReason.END_OF_DATA: 3, LabelReason.NO_ENTRY: 9,
+    LabelReason.ROLLOVER: 2, LabelReason.END_OF_DATA: 3,
+    LabelReason.SHORT_RUNWAY: 8, LabelReason.NO_ENTRY: 9,
 }
 
 
@@ -66,7 +68,9 @@ class BarrierConfig:
                                     # must not be able to hide as a dataclass
                                     # default, same rule as add_cost_features.
     max_bars: int = 48              # 12h at M15, the top of the holding window
-    min_bars: int = 16              # 4h, the bottom
+    min_bars: int = 16              # 4h at M15, the bottom -- and BINDING: a bar
+                                    # whose runway to the forced rollover exit is
+                                    # shorter than this emits no label at all.
     atr_period: int = 14
 
     def __post_init__(self) -> None:
@@ -117,6 +121,15 @@ def _side_labels(
         capped_by_rollover = 0 <= forced < limit
         if capped_by_rollover:
             limit = forced
+
+        # A bar four hours before the rollover can only describe a four-bar
+        # trade. Labelling it anyway puts the outcome outside the stated 4-12h
+        # holding period AND makes the label a function of time of day: the
+        # runway shrinks monotonically towards the session close, so a model
+        # would read the clock as signal. Mask it instead of labelling it.
+        if limit - e + 1 < cfg.min_bars:
+            reason[i] = _REASON_CODE[LabelReason.SHORT_RUNWAY]
+            continue
 
         hit = None
         for j in range(e, limit + 1):
