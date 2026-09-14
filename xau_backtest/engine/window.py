@@ -76,9 +76,10 @@ class BarWindow:
     references a row past the current bar.
     """
 
-    __slots__ = ("_cols", "_n")
+    __slots__ = ("_cols", "_n", "_calendar")
 
-    def __init__(self, cols: Mapping[str, npt.NDArray], n: int) -> None:
+    def __init__(self, cols: Mapping[str, npt.NDArray], n: int,
+                 calendar: object | None = None) -> None:
         if n < 1:
             raise ValueError("a window must contain at least the current bar")
         for name, arr in cols.items():
@@ -91,6 +92,7 @@ class BarWindow:
                 raise ValueError(f"column {name!r} must be read-only")
         self._cols = dict(cols)
         self._n = n
+        self._calendar = calendar
 
     # ---- identity -------------------------------------------------------
 
@@ -188,6 +190,37 @@ class BarWindow:
             spread_close=g("spread_close"), tick_count=int(g("tick_count")),
         )
 
+
+    # ---- session awareness (causal: never looks past the current bar) ----
+
+    def session(self, lag: int = 0) -> str:
+        """Session label of a bar. DST-aware via the session calendar."""
+        if self._calendar is None:
+            return "unknown"
+        return self._calendar.session_label(self.ts(lag)).value
+
+    def session_slice(self, name: str, day: object) -> dict[str, npt.NDArray] | None:
+        """Bars of ``day`` in session ``name``, up to the current bar ONLY.
+
+        Bounded to at most one day of bars, so cost per call does not grow with
+        history. Returns None when nothing matches or no calendar is attached.
+        """
+        if self._calendar is None or "ts_open" not in self._cols:
+            return None
+        lo = max(0, self._n - 1440)
+        idx: list[int] = []
+        col = self._cols["ts_open"]
+        for i in range(lo, self._n):
+            ts = _EPOCH.fromtimestamp(col[i].item() / 1_000_000, tz=timezone.utc)
+            if ts.date() != day:
+                continue
+            if self._calendar.session_label(ts).value == name:
+                idx.append(i)
+        if not idx:
+            return None
+        sel = np.asarray(idx)
+        return {k: v[sel] for k, v in self._cols.items()}
+
     def current(self) -> BarRow:
         return self._row(self._n - 1)
 
@@ -233,7 +266,7 @@ class BarHistory:
             bigger[: self._n] = self._buf[c][: self._n]
             self._buf[c] = bigger
 
-    def window(self) -> BarWindow:
+    def window(self, calendar: object | None = None) -> BarWindow:
         """O(1). Returns truncated, read-only views ending at the current bar."""
         if self._n == 0:
             raise ValueError("no bars revealed yet")
@@ -242,4 +275,5 @@ class BarHistory:
             v = self._buf[c][: self._n]
             v.flags.writeable = False
             cols[c] = v
-        return BarWindow(cols, self._n)
+        return BarWindow(cols, self._n, calendar)
+
