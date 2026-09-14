@@ -1,0 +1,508 @@
+================================================================================
+PHASE 7 -- WALK-FORWARD DESIGN PROPOSAL AND CONSTRAINT CROSS-REFERENCE
+XAUUSD signal research system
+branch: claude/xauusd-data-layer-6d9eg8
+companion file: docs/PHASE6_LABEL_REPORT.txt (all measured tables)
+================================================================================
+
+HOW TO USE THIS FILE
+  PART A  answers the four items raised before phase 7, each with the measured
+          evidence and where it is now enforced.
+  PART B  is the CONSTRAINT REGISTER -- every standing constraint, its source,
+          the evidence behind it, the code that enforces it and the test that
+          guards it. This is the cross-reference table.
+  PART C  is the phase 7 walk-forward design proposal, awaiting approval.
+  PART D  is the open-question and blocker list.
+
+STATUS KEY
+  [COMPUTED]  measured on the full history by scripts_label_report.py
+  [DERIVED]   arithmetic on a COMPUTED quantity
+  [BLOCKED]   requires the tick slice, which is incomplete
+
+
+================================================================================
+PART A -- THE FOUR ITEMS
+================================================================================
+
+--------------------------------------------------------------------------------
+A0. FOLD COUNT -- FIVE, NOT SIX
+--------------------------------------------------------------------------------
+  QUESTION  Section 5 said six folds and the table listed five. Which is it?
+
+  ANSWER    FIVE.
+
+  The config key walk_forward.n_folds: 6 is the number of equal BLOCKS the
+  history is cut into, not the number of folds. In xau_backtest/labeling/
+  weights.py, expanding_folds() builds edges = linspace(0, n, n_folds + 1) and
+  then loops k = 1 .. n_folds - 1. Fold k trains on blocks 0..k-1 and tests on
+  block k. Block 0 is a training seed and is never a test window.
+
+      SIX BLOCKS  ->  FIVE FOLDS
+
+  The rev 1 prose was wrong; the rev 1 table was right. The parameter name is
+  misleading and should be read as n_blocks. Not renamed yet -- renaming a
+  config key mid-project is a change worth making deliberately, see D4.
+
+--------------------------------------------------------------------------------
+A1. ALWAYS-LONG BENCHMARK -- COMPUTED, RECORDED AS 0.2f
+--------------------------------------------------------------------------------
+  REQUIREMENT  Run an always-long strategy through the identical folds and
+               report it alongside every model result. The model must beat that
+               benchmark, not zero.
+
+  RATIONALE    Gold ran 1868 to 4394 over the sample. Pooled long net -0.1315
+               ATR vs short -0.2467; gross +0.0688 vs -0.0466. That gap is
+               drift, not structure. Neither side covers the 0.2002 ATR cost
+               alone, so "beats zero" reads as a real bar -- but a model that
+               learns "mostly long, sometimes flat" harvests the drift.
+
+  RESULT                                                        [COMPUTED]
+
+    fold   AL net    AL wtd   AL win%   train eff n   test eff n
+    ----------------------------------------------------------------
+       0  -0.2963   -0.2572    41.64          730.9        714.0
+       1  -0.3063   -0.2350    40.21        1,443.2        732.3
+       2  +0.1279   +0.2161    46.75        2,177.3        733.3
+       3  +0.1294   +0.2221    48.23        2,910.2        706.9
+       4  -0.0370   -0.0425    46.83        3,615.6        690.8
+
+    AL net = unweighted mean net long label in ATR over the test window
+    AL wtd = the same, weighted by uniqueness
+
+  READ         Folds 2 and 3 pay +0.2161 and +0.2221 ATR per trade for holding
+               gold and nothing else. A model returning +0.15 ATR on fold 3 has
+               LOST to buy-and-hold.
+
+  ENFORCED     docs/BACKTEST_DESIGN.md section 0.2f
+  EVIDENCE     data/_reports/fold_benchmark.json
+               docs/PHASE6_LABEL_REPORT.txt section 5+6
+  PRODUCED BY  scripts_label_report.py
+
+--------------------------------------------------------------------------------
+A2. FOLD 0 IS FEATURE-DEFICIENT -- WORSE THAN ESTIMATED, RECORDED AS 0.2g
+--------------------------------------------------------------------------------
+  REQUIREMENT  Report fold 0 separately or drop it. Do not average it into the
+               headline. Report per-fold null rates for every feature.
+
+  ESTIMATE WAS the 1y percentile ranks are null for the first 17.54%, so fold 0
+               trains with regime features essentially absent.
+
+  MEASURED                                                      [COMPUTED]
+
+    feature              f0_tr  f0_te  f1_tr  f2_tr  f3_tr  f4_tr
+    ---------------------------------------------------------------
+    atr_pct_rank_1y      100.0    5.2   52.7   35.1   26.3   21.1
+    rv_pct_rank_1y       100.0    5.2   52.7   35.1   26.3   21.1
+    range_pct_rank_1y    100.0    5.2   52.7   35.1   26.3   21.1
+    spread_pct_rank_1y   100.0    5.2   52.7   35.1   26.3   21.1
+
+  READ         Not "essentially absent" -- ENTIRELY absent. Fold 0 trains in a
+               54-feature space and is tested in a 58-feature one. LightGBM
+               routes every training row down the missing branch, so nothing it
+               learned about those four can generalise to a test window where
+               they are 94.8% populated. This is a different feature space, not
+               a smaller sample, exactly as stated.
+
+  NEXT GAP     The largest train-minus-test null gap after those four is 2.2pp
+               (volume_z_500, spread_z_500, rv_vs_median_500,
+               bar_range_rel_median_500, volume_rel_median_500,
+               spread_rel_median_500). Immaterial.
+
+  STRUCTURAL   Two features carry a high but STABLE null rate, equal in train
+  NULLS        and test, which is not a mismatch and needs no treatment:
+                 asian_range_atr   33.1% in every fold, both sides
+                 session_progress  16.0-16.2% in every fold, both sides
+
+  RULE         Fold 0 reported separately, never averaged into the headline.
+               Any feature whose train-minus-test null gap exceeds 10pp in a
+               fold gets the same treatment.
+
+  ENFORCED     docs/BACKTEST_DESIGN.md section 0.2g
+  EVIDENCE     docs/PHASE6_LABEL_REPORT.txt, full 58-feature table
+               data/_reports/label_report.txt
+  PRODUCED BY  scripts_label_report.py
+
+--------------------------------------------------------------------------------
+A3. THE min_bars MASK -- APPLIED. IT WAS A BUG, NOT AN OPTION
+--------------------------------------------------------------------------------
+  REQUIREMENT  Mask labels whose runway to rollover is under min_bars (16).
+               Report count masked, and the new exit-reason split and effective
+               n afterward.
+
+  FINDING      min_bars was declared on BarrierConfig and validated in
+               __post_init__ ("max_bars must be >= min_bars") but was NEVER
+               ENFORCED anywhere in the labelling loop. Confirmed by grep: the
+               only references were the declaration, the validation and the
+               config file. So this was a latent bug the item correctly
+               identified, not a policy choice.
+
+  FIX          xau_backtest/labeling/barriers.py -- after the rollover cap is
+               applied, a bar whose remaining runway is shorter than min_bars
+               emits LabelReason.SHORT_RUNWAY (code 8) and no label.
+
+  COUNT MASKED 22,058                                           [COMPUTED]
+
+  EXIT-REASON SPLIT, LONG SIDE, n = 134,687 bars
+
+    reason          BEFORE     %      AFTER      %
+    ---------------------------------------------------
+    stop            45,194  33.55    44,846  33.30
+    rollover        48,859  36.28    27,250  20.23
+    target          23,013  17.09    22,920  17.02
+    time (48-bar)   17,599  13.07    17,599  13.07
+    short_runway         -      -    22,058  16.38
+    no_entry            14   0.01        14   0.01
+    end_of_data          8   0.01         -      -
+    ---------------------------------------------------
+    labelled       134,673          112,615
+    removed                          22,058  (16.38% of previously labelled)
+
+  EFFECTIVE N
+
+    BEFORE   4,756     concurrency mean 28.4   max 49
+    AFTER    4,311     concurrency mean 27.0   max 49
+    change   -9.4% against a 16.38% label loss
+
+  READ         The mask removed 44% of rollover exits and left 48-bar time
+               exits untouched at 17,599 -- that invariance is the correctness
+               check, since the mask must bite on short runways and nothing
+               else. Effective n fell less than the label count because the
+               masked labels were the most redundant in the sample: they sat
+               at the end of sessions where concurrency is highest.
+
+  ENFORCED     xau_backtest/labeling/barriers.py, _side_labels()
+  GUARDED BY   tests/test_labeling.py
+                 test_short_runway_bars_emit_no_label
+                 test_masking_removes_labels_and_is_side_symmetric
+                 test_masking_cuts_rollover_exits_hardest
+
+--------------------------------------------------------------------------------
+A4. GEOMETRY -- PRE-REGISTERED, NOT RE-SWEPT. RECORDED AS 0.2h
+--------------------------------------------------------------------------------
+  POINT MADE   3a's sensitivity 1/(S+T) is monotonic in width, so it favours
+               ever-wider barriers and cannot uniquely justify 4/6. Duration is
+               the binding constraint and duration is data-derived.
+
+  ACCEPTED     Correct, and it is now recorded as the reason 0.2d cannot
+               justify the geometry on its own. The breakeven argument shows
+               4/6 is ROBUST to the cost regime; it does not show 4/6 is
+               OPTIMAL, and taken alone it has no interior maximum.
+
+  PROVENANCE   The 4/6 sweep ran on the full sample. Its stated criterion was
+               hold-duration fit. A net ATR column was VISIBLE in its output.
+               The selected row is not the sweep's net-ATR maximum -- a
+               return-driven search would have pushed wider, not stopped at 4/6
+               -- but the exposure is real and is recorded rather than argued
+               away.
+
+  RESOLUTION   Pre-registration, not re-selection.
+               1. 4.0 / 6.0 ATR is FIXED NOW, before any phase 7 model is
+                  fitted. Not re-swept, not tuned inside folds, not revisited
+                  on the strength of a result.
+               2. 3.0/4.5 and 6.0/9.0 are reported in phase 7 as ROBUSTNESS
+                  CHECKS ONLY. Both preserve the 1.5 gross R:R and bracket the
+                  pre-registered width. They are never a selection set; no
+                  result may change the headline geometry.
+               3. An edge present ONLY at 4/6 is diagnostic of overfitting and
+                  is reported as such, not as a finding.
+
+  ENFORCED     docs/BACKTEST_DESIGN.md section 0.2h
+               configs/config.yaml labeling.stop_atr / labeling.target_atr
+
+
+================================================================================
+PART B -- CONSTRAINT REGISTER (THE CROSS-REFERENCE TABLE)
+================================================================================
+
+ID    CONSTRAINT                        ENFORCED IN / GUARDED BY
+----  --------------------------------  ----------------------------------------
+0.2   Calibration reference computed     xau_backtest/engine/broker.py
+      per fill, never hardcoded          tests/test_no_hardcoded_costs.py
+                                           test_no_hardcoded_dollar_cost
+                                           test_slippage_comes_from_config_and_
+                                             has_no_default
+                                           test_config_exposes_costs_and_scales_
+                                             with_price
+                                           test_spread_quality_threshold_is_
+                                             relative_not_absolute
+
+0.2a  Walk-forward uses an EXPANDING     xau_backtest/labeling/weights.py
+      window, never a fixed rolling      expanding_folds()
+      one. Volatility regimes cluster:   tests/test_labeling.py
+      the three most volatile months       test_folds_expand_and_never_roll
+      are consecutive (2026-01/02/03).    test_test_windows_are_contiguous_
+                                            and_disjoint
+
+0.2b  Cost drag reported PER FOLD,       phase 7 fold report (PART C.6)
+      gross AND net                      evidence: data/_reports/
+                                           cost_to_atr_monthly.txt
+
+0.2c  NEVER require complete cases.      phase 7 model config (PART C.4)
+      LightGBM native null handling.     dropping them costs ~40% of sample
+      No complete-case filtering.
+
+0.2d  Cost sensitivity is 1/(S+T).       docs/BACKTEST_DESIGN.md 0.2d
+      3.3pp across the full observed     see PART B.1 below for the arithmetic
+      cost range at 4/6. Fold-level
+      net is NOT comparable across
+      folds; report realised c.
+
+0.2e  Model capacity set by EFFECTIVE    phase 7 model config (PART C.4)
+      sample per fold, not bar count.    min_child_samples from train_eff_n
+      Report effective n every fold.     evidence: PART A1 table
+
+0.2f  Benchmark is ALWAYS-LONG,          phase 7 fold report (PART C.6)
+      never zero.                        evidence: data/_reports/
+                                           fold_benchmark.json
+
+0.2g  Fold 0 reported separately,        phase 7 fold report (PART C.6)
+      never averaged into the headline.  evidence: PART A2 table
+      Per-fold null rates for every
+      feature, every run.
+
+0.2h  Barrier geometry PRE-REGISTERED    configs/config.yaml
+      at 4.0/6.0. 3.0/4.5 and 6.0/9.0    phase 7 robustness block (PART C.7)
+      are robustness checks only.
+
+FEAT  EVERY feature scale-free. No       xau_backtest/features/
+      absolute dollar value, or the      tests/test_feature_causality.py
+      model learns the calendar.           test_no_feature_scales_with_price_level
+                                           test_barriers_scale_with_atr_not_dollars
+
+CAUS  Every feature trailing-window      tests/test_feature_causality.py
+      and causal. Truncating the           test_every_feature_is_causal_under_
+      future must not move an earlier        truncation
+      value.                               test_appending_a_bar_never_rewrites_
+                                             history
+                                           test_a_later_volatility_regime_shift_
+                                             cannot_reach_back
+                                           test_shift_refuses_to_look_forward
+                                           test_rolling_rank_is_exact
+
+EXEC  Labels describe a trade the        xau_backtest/labeling/barriers.py
+      ENGINE could execute: next-bar     tests/test_labeling.py
+      open fill, correct side, same        test_entry_is_the_next_bar_open_not_
+      rollover cap, pessimistic              the_signal_bar
+      intrabar resolution.                 test_no_label_spans_a_rollover
+                                           test_rollover_capped_labels_are_marked
+                                           test_pessimistic_when_both_barriers_
+                                             sit_in_one_bar
+                                           test_gross_minus_net_is_the_full_
+                                             round_trip
+
+HOLD  Holding period 4-12h. min_bars     xau_backtest/labeling/barriers.py
+      is BINDING: a runway under 16      tests/test_labeling.py
+      bars emits no label.                 test_short_runway_bars_emit_no_label
+                                           test_masking_removes_labels_and_is_
+                                             side_symmetric
+                                           test_masking_cuts_rollover_exits_
+                                             hardest
+
+SEL   NO feature selection or            phase 7 inner folds only (PART C.5)
+      importance ranking outside         importances never pooled across folds
+      walk-forward folds.
+
+ASIAN Asian range POSITION is a dead     xau_backtest/features/build.py
+      end for direction. WIDTH           _asian_range_atr()
+      relative to trailing norm is       feature: asian_range_atr
+      fair game as volatility context.
+
+TEST SUITE  190 passing
+
+
+--------------------------------------------------------------------------------
+B.1  THE BREAKEVEN ARITHMETIC, FOR CROSS-REFERENCE          [DERIVED]
+--------------------------------------------------------------------------------
+  For stop S (ATR), target T (ATR), round-trip cost c (ATR):
+
+      win  = T - c
+      loss = S + c
+      breakeven = (S + c) / ((T - c) + (S + c)) = (S + c) / (S + T)
+      d(breakeven)/dc = 1 / (S + T)
+
+  The cost CANCELS from the denominator. Sensitivity depends only on total
+  barrier width -- and is monotonically decreasing in it, which is precisely
+  why this argument cannot select a geometry (see A4).
+
+  PRE-REGISTERED 4.0 / 6.0   (S+T = 10)   ->  10 pp per 1.0 ATR of cost
+
+    cost regime                         c       R:R    breakeven
+    ----------------------------------------------------------------
+    2026, lowest observed            0.08     1.451       40.8%
+    observed pooled (measured)       0.2002   1.380       42.0%
+    full reversion, spread sticky    0.41     1.268       44.1%
+    ----------------------------------------------------------------
+    shift across the full observed range:                  3.3 pp
+
+  REJECTED 1.0 / 1.5         (S+T = 2.5)  ->  40 pp per 1.0 ATR of cost
+
+    cost regime                         c       R:R    breakeven
+    ----------------------------------------------------------------
+    2026, lowest observed            0.08     1.315       43.2%
+    observed pooled                  0.2002   1.082       48.0%
+    full reversion                   0.41     0.773       56.4%
+    ----------------------------------------------------------------
+    shift across the full observed range:                 13.2 pp
+
+  ROBUSTNESS GEOMETRIES, for phase 7 reporting only
+    3.0 / 4.5  (S+T = 7.5)  -> 13.3 pp per ATR; breakeven at c=0.2002 = 42.7%
+    6.0 / 9.0  (S+T = 15)   ->  6.7 pp per ATR; breakeven at c=0.2002 = 41.3%
+
+
+================================================================================
+PART C -- PHASE 7 WALK-FORWARD DESIGN PROPOSAL (awaiting approval)
+================================================================================
+
+--------------------------------------------------------------------------------
+C.1  WHAT THE MODEL PREDICTS
+--------------------------------------------------------------------------------
+  Two INDEPENDENT binary classifiers, one per side:
+
+      long  model:  P(label_long_ret_atr_net  > 0)
+      short model:  P(label_short_ret_atr_net > 0)
+
+  JUSTIFICATION -- the target is BIMODAL, measured:        [COMPUTED]
+
+    60.3% of labels resolve at a barrier and take one of two near-deterministic
+    values, -4.0138 (stop) or +5.9857 (target), each with sd 0.0070. That sd is
+    only the spread and slippage varying; the level IS the barrier.
+    39.7% are time or rollover exits, continuously distributed at sd 1.78-2.05.
+
+  So predicting the sign is, for three fifths of the sample, predicting which
+  barrier gets hit. A regression on the return would be dominated by the two
+  spikes and would spend its capacity fitting the barrier levels it already
+  knows.
+
+  REJECTED ALTERNATIVES
+    three-class (long / short / flat)  -- forces a directional commitment at
+        fit time and makes "take neither" a class rather than a threshold,
+        which is where it belongs.
+    regression on net return in ATR    -- see bimodality above.
+    long-minus-short spread            -- assumes the sides are mirror images.
+        They are not: the pessimistic resolver and the rollover truncation both
+        bite asymmetrically, and the measured long/short gap is drift.
+
+--------------------------------------------------------------------------------
+C.2  THE DECISION RULE
+--------------------------------------------------------------------------------
+  Threshold on predicted probability, with a FLOOR at the fold's own computed
+  breakeven:
+
+      floor_fold = (S + c_fold) / (S + T)
+
+  using that fold's REALISED mean round-trip cost c_fold, never a hardcoded
+  0.5 and never a pooled c. The threshold itself is selected on inner folds
+  only and may only sit at or above the floor.
+
+  This ties the decision rule directly to 0.2d: when the cost regime shifts
+  between folds, the bar the model must clear shifts with it automatically.
+
+--------------------------------------------------------------------------------
+C.3  FOLD STRUCTURE
+--------------------------------------------------------------------------------
+  OUTER   the 5 folds as built. Expanding, embargo 96 bars, purged by
+          label_exit_index. Fold 0 excluded from the headline per 0.2g and
+          reported in its own block.
+
+  INNER   a 3-fold EXPANDING split of each outer training window, using the
+          same purge and embargo machinery. ALL selection happens here:
+          hyperparameters, feature selection, and the probability threshold.
+          Nothing from an outer test window touches any of them.
+
+--------------------------------------------------------------------------------
+C.4  MODEL AND REGULARISATION
+--------------------------------------------------------------------------------
+  LightGBM, native null handling, NO complete-case filtering (0.2c).
+
+  Sized against EFFECTIVE n, not row count (0.2e):
+
+    max_depth            3
+    num_leaves           <= 8
+    min_child_samples    max(50, 0.05 * train_eff_n)
+                           -> fold 0: 50 (floor binds)   fold 1: 72
+                              fold 2: 109   fold 3: 146   fold 4: 181
+    feature_fraction     0.5
+    bagging              BY LABEL BLOCK, not by row, so overlapping labels do
+                         not leak across the bag boundary
+    lambda_l2            short inner-selected grid
+    early stopping       inner split only
+    sample_weight        uniqueness weights (materialised column)
+
+--------------------------------------------------------------------------------
+C.5  FEATURE SELECTION
+--------------------------------------------------------------------------------
+  Permutation importance on the inner validation split; keep top k, with k
+  itself chosen on the inner split from a short grid.
+
+  Importances are REPORTED per outer fold for inspection but NEVER POOLED
+  across folds into a global ranking. Pooling reintroduces the leak through
+  the back door.
+
+--------------------------------------------------------------------------------
+C.6  PER-FOLD REPORT -- MANDATORY, NO EXCEPTIONS
+--------------------------------------------------------------------------------
+  Every one of these, every fold:
+
+    effective n, train and test                              (0.2e)
+    realised round-trip cost c in ATR                        (0.2b, 0.2d)
+    GROSS and NET expectancy in ATR                          (0.2b)
+    THE ALWAYS-LONG FIGURE FOR THE SAME FOLD                 (0.2f)
+    realised accuracy vs the fold's computed breakeven       (C.2)
+    coverage: fraction of bars clearing the threshold
+    decomposition by exit reason (target/stop/rollover/time) (A3)
+    per-feature null rate, train and test                    (0.2g)
+    phase-4 baselines on the same test window
+
+  HEADLINE RULE  the comparison is against the always-long figure, not against
+                 zero, and fold 0 is not in the headline.
+
+--------------------------------------------------------------------------------
+C.7  GUARDS -- RUN BEFORE ANY RESULT IS BELIEVED
+--------------------------------------------------------------------------------
+  1. SHUFFLED-LABEL CONTROL. Same pipeline, labels permuted within fold. Must
+     produce net expectancy indistinguishable from the cost drag. If it does
+     not, the pipeline leaks.
+
+  2. TIME-OF-DAY ABLATION. Refit without session_asian/london/overlap/ny,
+     session_progress and mins_to_rollover. The min_bars mask cut the
+     MECHANISM behind the time-of-day conditioning but not necessarily the
+     CORRELATION. If performance collapses without them, the model is trading
+     the session clock, not the market.
+
+  3. COST-REGIME SPLIT. Report folds grouped by high-cost and low-cost era so
+     the 5x cost decline cannot masquerade as improving edge.
+
+  4. GEOMETRY ROBUSTNESS. Re-run at 3.0/4.5 and 6.0/9.0. REPORTED, never
+     selected on. An edge present only at 4/6 is diagnostic of overfitting
+     (0.2h).
+
+
+================================================================================
+PART D -- OPEN QUESTIONS AND BLOCKERS
+================================================================================
+
+D1. [BLOCKED] PESSIMISTIC-RESOLVER BIAS, UNMEASURED.
+    When stop and target both sit inside one bar, the labeller assigns the
+    stop. That is a biased estimator by construction and the bias is recorded
+    per label (label_ambiguous) but has never been measured against ticks.
+    Requires the 6-month tick validation slice: 2026-01 partially downloaded,
+    three months not started, download restarted.
+    UNTIL IT LANDS every net figure in this file and in
+    docs/PHASE6_LABEL_REPORT.txt carries an unquantified DOWNWARD bias of
+    unknown size. Phase 7 results should be treated as provisional and the
+    fold report re-run once the measurement exists.
+
+D2. [OPEN] Does the min_bars mask fully remove the time-of-day conditioning,
+    or only its mechanism? Guard C.7.2 is the test. Not yet run.
+
+D3. [OPEN] Fold 0: reported separately per 0.2g, but should it be dropped
+    entirely? Reporting it separately is the conservative choice and is what
+    is proposed. Dropping it costs a fifth of the walk-forward and the
+    earliest regime. No decision needed before the first run.
+
+D4. [OPEN] walk_forward.n_folds is really n_blocks (A0). Renaming it is a
+    config-schema change. Proposed but not made.
+
+================================================================================
+END
+================================================================================

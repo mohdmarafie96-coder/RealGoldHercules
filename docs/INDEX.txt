@@ -1,0 +1,79 @@
+================================================================================
+DOCUMENT INDEX -- XAUUSD signal research system
+branch: claude/xauusd-data-layer-6d9eg8
+================================================================================
+
+DESIGN RECORD (docs/)
+  DESIGN.md                  phase 1 data-layer schema and directory layout
+  BACKTEST_DESIGN.md         engine architecture + the numbered constraint
+                             register 0.1 - 0.3. THE AUTHORITATIVE SOURCE for
+                             every standing constraint.
+  M1_CANDLE_VERIFICATION.md  Dukascopy M1 candle format, reverse-engineered and
+                             verified exact against tick-derived bars
+  INFRASTRUCTURE.md          GCS / GCE runbook
+  FEATURE_PROPOSAL.md        phase 5 feature list as proposed and approved
+  FEATURE_CATALOGUE.md       generated catalogue of the 58 built features
+  PHASE6_LABEL_REPORT.txt    every MEASURED phase 6 table (rev 2)
+  PHASE7_DESIGN.txt          phase 7 design proposal + CONSTRAINT CROSS-REFERENCE
+  INDEX.txt                  this file
+
+CONSTRAINTS, BY ID          (full text in BACKTEST_DESIGN.md, cross-referenced
+                             to code and tests in PHASE7_DESIGN.txt part B)
+  0.2   calibration reference computed per fill, never hardcoded
+  0.2a  walk-forward uses an EXPANDING window
+  0.2b  cost drag reported per fold, gross AND net
+  0.2c  never require complete cases; LightGBM native nulls
+  0.2d  cost sensitivity is 1/(S+T); 3.3pp across the observed range at 4/6
+  0.2e  model capacity set by EFFECTIVE sample per fold
+  0.2f  the benchmark is ALWAYS-LONG, never zero
+  0.2g  fold 0 is feature-deficient; reported separately
+  0.2h  barrier geometry PRE-REGISTERED at 4.0/6.0
+
+GENERATED EVIDENCE (data/_reports/)
+  label_report.txt           source of every table in PHASE6_LABEL_REPORT.txt
+  fold_benchmark.json        per-fold always-long benchmark, machine-readable
+  cost_to_atr_monthly.txt    69-month cost series behind 0.2b and 0.2d
+  month_ranking.txt          month ranking on three measures
+  feature_coverage.json      per-feature null rate, range, warm-up
+  feature_correlation.json   pairwise feature correlation
+  baselines.json             phase 4 baselines, USD
+  baselines_atr.json         phase 4 baselines, ATR-normalised
+  validation_all.md          data-layer quality report, full history
+
+SCRIPTS
+  scripts_backfill_m1.py     M1 candle backfill (1,785 days, 69 months)
+  scripts_backfill_ticks.py  tick slice backfill (6 months; INCOMPLETE)
+  scripts_baselines.py       phase 4 baselines through the engine
+  scripts_feature_report.py  feature coverage, correlation, catalogue
+  scripts_label_report.py    labels + every phase 6 table + the fold benchmark
+
+PACKAGES
+  xau_data/                  phase 1 data layer: ingest, transform, quality,
+                             storage. SessionCalendar is the single source of
+                             truth for rollover.
+  xau_backtest/engine/       lookahead-proof event loop. BarWindow is an
+                             append-only revealed buffer: future rows are
+                             physically absent, not bounds-checked.
+  xau_backtest/features/     58 causal, scale-free features
+  xau_backtest/labeling/     triple-barrier labels, uniqueness weights,
+                             purged and embargoed expanding folds
+
+TESTS  190 passing
+  test_window.py             14  lookahead barrier, incl. an adversarial
+                                 strategy and a reachability audit
+  test_sessions_dst.py      105  both DST weeks x 2021-2026, plus a tokenised
+                                 no-hardcoded-hour guard
+  test_candles.py            17  Dukascopy candle format and vendor fill strip
+  test_engine_acceptance.py  12  incl. paired differential cost calibration
+  test_features.py           11
+  test_feature_causality.py  11  causality and scale-freedom, EVERY feature
+  test_labeling.py           15  execution fidelity, the min_bars mask,
+                                 purging, embargo, expanding folds
+  test_no_hardcoded_costs.py  5  no cost assumption may hide in a default
+
+OPEN BLOCKER
+  pessimistic-resolver bias is UNMEASURED. It needs the 6-month tick slice,
+  which is incomplete. Until it lands every net figure carries an unquantified
+  downward bias. See PHASE7_DESIGN.txt part D1.
+
+================================================================================
