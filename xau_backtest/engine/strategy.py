@@ -15,7 +15,8 @@ from ..types import Order, Side
 from .position import PortfolioView
 from .window import BarWindow
 
-__all__ = ["Strategy", "RandomStrategy", "LondonBreakoutStrategy"]
+__all__ = ["Strategy", "RandomStrategy", "LondonBreakoutStrategy",
+           "AsianRangeFadeStrategy"]
 
 
 class Strategy(ABC):
@@ -182,5 +183,94 @@ class LondonBreakoutStrategy(Strategy):
                 stop_distance=self._stop_atr * atr,
                 target_distance=self._target_atr * atr,
                 max_bars=self._max_bars, tag="london_breakout",
+            ),
+        )
+
+
+class AsianRangeFadeStrategy(Strategy):
+    """Mean reversion: FADE breaks of the Asian range instead of following them.
+
+    Deliberately the mirror of LondonBreakoutStrategy on the same signal, so the
+    pair brackets the question rather than testing one direction. A break above
+    the Asian high is sold, a break below is bought, the stop sits beyond the
+    extreme and the target is the range midpoint.
+
+    Being the mirror does NOT make its expectancy the negative of the breakout's:
+    both pay the spread, both pay slippage, and their stop and target geometries
+    differ. If both lose, the signal carries no directional information at this
+    horizon, which is a more useful result than either alone.
+    """
+
+    name = "asian_fade"
+
+    def __init__(
+        self,
+        *,
+        atr_period: int = 14,
+        stop_atr: float = 1.0,
+        max_bars: int = 32,
+        size: float = 1.0,
+        max_concurrent: int = 1,
+        min_range_atr: float = 0.25,
+        target_fraction: float = 0.5,
+    ) -> None:
+        self._atr_period = atr_period
+        self._stop_atr = stop_atr
+        self._max_bars = max_bars
+        self._size = size
+        self._max_concurrent = max_concurrent
+        self._min_range_atr = min_range_atr
+        self._target_fraction = target_fraction
+        self._traded_days: set[object] = set()
+
+    def _atr(self, window: BarWindow) -> float | None:
+        n = self._atr_period + 1
+        if len(window) < n:
+            return None
+        hi = window.series("bid_high", n)
+        lo = window.series("bid_low", n)
+        cl = window.series("bid_close", n)
+        tr = np.maximum.reduce([
+            hi[1:] - lo[1:], np.abs(hi[1:] - cl[:-1]), np.abs(lo[1:] - cl[:-1]),
+        ])
+        v = float(np.mean(tr))
+        return v if v > 0 else None
+
+    def on_bar(self, window: BarWindow, portfolio: PortfolioView) -> Sequence[Order]:
+        if window.session() != "london" or len(portfolio) >= self._max_concurrent:
+            return ()
+        day = window.ts().date()
+        if day in self._traded_days:
+            return ()
+
+        asian = window.session_slice("asian", day)
+        if asian is None or len(asian["bid_high"]) < 4:
+            return ()
+        hi = float(np.max(asian["bid_high"]))
+        lo = float(np.min(asian["bid_low"]))
+        atr = self._atr(window)
+        if atr is None or (hi - lo) < self._min_range_atr * atr:
+            return ()
+
+        close = window.value("bid_close")
+        mid_range = (hi + lo) / 2.0
+        if close > hi:
+            side = Side.SHORT                     # fade the upside break
+        elif close < lo:
+            side = Side.LONG                      # fade the downside break
+        else:
+            return ()
+
+        target_distance = abs(close - mid_range) * (self._target_fraction * 2.0)
+        if target_distance <= 0:
+            return ()
+
+        self._traded_days.add(day)
+        return (
+            Order(
+                side=side, size=self._size,
+                stop_distance=self._stop_atr * atr,
+                target_distance=target_distance,
+                max_bars=self._max_bars, tag="asian_fade",
             ),
         )

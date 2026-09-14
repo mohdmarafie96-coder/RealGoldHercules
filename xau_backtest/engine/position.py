@@ -31,6 +31,7 @@ class Position:
     target_price: float | None = None
     max_bars: int | None = None
     tag: str = ""
+    entry_atr: float | None = None
     swap_paid: float = 0.0
     #: Rollover dates already charged, so a re-entrant call cannot double-charge.
     swaps_charged: set[date] = field(default_factory=set)
@@ -66,6 +67,7 @@ class ClosedTrade:
     exit_spread: float
     session: str
     tag: str = ""
+    entry_atr: float | None = None
 
     @property
     def bars_held(self) -> int:
@@ -74,6 +76,22 @@ class ClosedTrade:
     @property
     def cost_total(self) -> float:
         return self.spread_cost + self.slippage_cost + self.swap_cost
+
+    @property
+    def net_pnl_per_unit(self) -> float:
+        return self.net_pnl / self.size
+
+    @property
+    def net_pnl_atr(self) -> float | None:
+        """Net P&L per unit expressed in ATR at entry.
+
+        Dollar expectancy cannot separate a worse rule from a wider regime: a
+        breakout taking 3x larger stops in a 3x wider market loses 3x more
+        dollars while being the same rule. This normalises that away.
+        """
+        if not self.entry_atr or self.entry_atr <= 0:
+            return None
+        return self.net_pnl / self.size / self.entry_atr
 
 
 class PortfolioView:
@@ -106,7 +124,8 @@ class PortfolioView:
             Position(
                 p.id, p.side, p.size, p.entry_ts, p.entry_price, p.entry_bar,
                 p.entry_spread, p.entry_slippage, p.stop_price, p.target_price,
-                p.max_bars, p.tag, p.swap_paid, set(p.swaps_charged),
+                p.max_bars, p.tag, p.entry_atr, p.swap_paid,
+                set(p.swaps_charged),
             )
             for p in self._p.positions
         )
@@ -160,13 +179,13 @@ class Portfolio:
 
     def open(self, fill: Fill, *, stop_price: float | None,
              target_price: float | None, max_bars: int | None,
-             tag: str = "") -> Position:
+             tag: str = "", entry_atr: float | None = None) -> Position:
         pos = Position(
             id=next(_ids), side=fill.side, size=fill.size, entry_ts=fill.ts,
             entry_price=fill.price, entry_bar=fill.bar_index,
             entry_spread=fill.spread, entry_slippage=fill.slippage,
             stop_price=stop_price, target_price=target_price,
-            max_bars=max_bars, tag=tag,
+            max_bars=max_bars, tag=tag, entry_atr=entry_atr,
         )
         self.positions.append(pos)
         return pos
@@ -187,7 +206,7 @@ class Portfolio:
             gross_pnl=gross, spread_cost=spread_cost, slippage_cost=slip_cost,
             swap_cost=pos.swap_paid, net_pnl=net,
             entry_spread=pos.entry_spread, exit_spread=exit_spread,
-            session=session, tag=pos.tag,
+            session=session, tag=pos.tag, entry_atr=pos.entry_atr,
         )
         self.cash += net
         self.positions.remove(pos)

@@ -76,6 +76,21 @@ def _quotes_from(window: BarWindow, lag: int = 0, *, zero_spread: bool = False) 
     )
 
 
+def _causal_atr(window: BarWindow, period: int = 14) -> float | None:
+    """Wilder-style ATR over the last `period` closed bars. Causal by construction."""
+    n = period + 1
+    if len(window) < n:
+        return None
+    hi = window.series("bid_high", n)
+    lo = window.series("bid_low", n)
+    cl = window.series("bid_close", n)
+    tr = np.maximum.reduce([hi[1:] - lo[1:],
+                            np.abs(hi[1:] - cl[:-1]),
+                            np.abs(lo[1:] - cl[:-1])])
+    v = float(np.mean(tr))
+    return v if v > 0 else None
+
+
 def run_backtest(
     source: BarSource,
     strategy: Strategy,
@@ -87,6 +102,7 @@ def run_backtest(
     slippage: SlippageModel,
     swap: SwapModel | None = None,
     resolver: IntrabarResolver | None = None,
+    atr_period: int = 14,
     columns: Sequence[str] | None = None,
     zero_cost: bool = False,
 ) -> BacktestResult:
@@ -121,7 +137,8 @@ def run_backtest(
             target = (out.price + sign * order.target_distance
                       if order.target_distance else None)
             pf.open(out, stop_price=stop, target_price=target,
-                    max_bars=order.max_bars, tag=order.tag)
+                    max_bars=order.max_bars, tag=order.tag,
+                    entry_atr=_causal_atr(window, atr_period))
             strategy.on_fill(out)
         pending = []
 
