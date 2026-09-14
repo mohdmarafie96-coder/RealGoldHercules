@@ -96,6 +96,36 @@ at a bootstrap-to-naive standard error ratio of 0.981.
 `tests/test_no_hardcoded_costs.py` enforces this structurally, failing on any
 dollar-magnitude literal near a cost-shaped identifier anywhere in the package.
 
+### 0.2b Cost drag MUST be reported per fold
+
+Measured across all 69 months, cost relative to volatility **fell by 54%**, and
+the fall is concentrated rather than smooth.
+
+| Window | Months | cost / ATR(14) | cost / median bar range |
+|---|---:|---:|---:|
+| 2021-01 .. 2024-06 | 42 | 0.2150 | 0.2397 |
+| 2024-07 .. 2026-09 | 27 | 0.1293 | 0.1431 |
+| First five months | 5 | 0.1958 | 0.2210 |
+| Last five months | 5 | 0.0893 | 0.0989 |
+
+Within 2021 to mid-2024 there is no trend: the ratio oscillates between about
+0.12 and 0.31 with no direction. The decline begins around 2024-07 and deepens
+through 2025 and 2026, bottoming at 0.0595 in 2026-03.
+
+**Consequence for walk-forward.** An ATR-sized strategy gets mechanically
+cheaper to run over this sample. A late fold faces roughly half the cost per
+unit of volatility that an early fold faced, for reasons having nothing to do
+with the model. Later folds will therefore look better even with identical edge.
+
+Phase 7 must therefore report, per fold:
+
+- mean `cost_to_atr_ratio` over the fold
+- gross and net expectancy in ATR units, separately
+- cost drag as a fraction of gross
+
+and any claim that performance improved over time must be checked against the
+cost-drag series before it is believed.
+
 ### 0.2a Walk-forward must use an EXPANDING window
 
 The volatility regime range across the history is more than 5x, from 8.6% to
