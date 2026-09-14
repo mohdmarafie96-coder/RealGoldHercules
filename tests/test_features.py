@@ -10,12 +10,18 @@ import pytest
 from xau_data.storage.schemas import BARS
 from xau_data.transform.features import (
     DEFAULT_ATR_PERIOD,
-    add_cost_features,
+    add_cost_features as _acf,
     atr_wilder,
     true_range,
 )
 
 UTC = timezone.utc
+SLIP = 0.03   # fixture value; production slippage comes from configs/config.yaml
+
+
+def add_cost_features(bars, *, slippage_per_side: float = SLIP, **kw):
+    """Test wrapper. The real function requires slippage explicitly, by design."""
+    return _acf(bars, slippage_per_side=slippage_per_side, **kw)
 
 
 def make_bars(n: int, seed: int = 0, spread: float = 0.39) -> pa.Table:

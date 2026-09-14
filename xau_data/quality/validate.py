@@ -68,7 +68,7 @@ def validate_bars(
             timeframe=tf,
             spike_sigma=float(q.get("spike_sigma", 8.0)),
             min_tick_count=q.get("min_tick_count", {}),
-            max_spread=float(q.get("max_spread", 25.0)),
+            max_spread_bps=float(q.get("max_spread_bps", 50.0)),
         )
     return ValidationReport(cfg.symbol, datetime.now(UTC), out, coverage or {})
 

@@ -70,6 +70,21 @@ ingest:
   calendar:
     sources: []          # CSV import path or weekly archiver; none configured yet
 
+# Transaction costs. NOTHING in the codebase may hardcode a dollar cost.
+# Spread is always read PER FILL from the bar being filled on; only the
+# slippage adder lives here, because it is a modelling assumption rather than
+# an observation.
+#
+# Measured 2021-01..2026-09: mean spread runs 0.32 to 1.03 USD/oz as gold goes
+# from 1700 to 5000, so absolute spread scales with price. Relative cost is
+# stable at 1.67-2.20 bps with no trend. Any constant in dollars is a window
+# artifact and will be wrong in another regime.
+costs:
+  slippage_per_side: 0.03      # USD/oz, added to each fill, adverse
+  # Optional relative floor so slippage scales with price regime too.
+  # Effective slippage = max(slippage_per_side, price * slippage_bps / 10000).
+  slippage_bps: 0.0
+
 join:
   context:
     key: publication_time      # the only legal value
@@ -78,6 +93,7 @@ join:
 quality:
   spike_sigma: 8.0
   min_tick_count: {M1: 1, M5: 3, M15: 5, H1: 20}
-  max_spread: 25.0
+  # Relative, not absolute: 25 USD was ~14 bps at 1800 and ~5 bps at 5000.
+  max_spread_bps: 50.0
   context_staleness_days: 5
   fail_on: error

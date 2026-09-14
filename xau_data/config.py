@@ -13,7 +13,7 @@ import yaml
 from .errors import ConfigError
 
 __all__ = ["Config", "load_config", "DukascopyConfig", "SessionConfig",
-           "SessionWindow", "ContextSeries"]
+           "SessionWindow", "ContextSeries", "CostConfig"]
 
 _ENV_ROOT: Final[str] = "XAU_DATA_ROOT"
 
@@ -59,6 +59,22 @@ class ContextSeries:
 
 
 @dataclass(frozen=True, slots=True)
+class CostConfig:
+    """Cost model inputs. Spread is never here: it is read per fill."""
+
+    slippage_per_side: float
+    slippage_bps: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.slippage_per_side < 0 or self.slippage_bps < 0:
+            raise ConfigError("slippage must be non-negative")
+
+    def slippage_at(self, price: float) -> float:
+        """Adverse slippage per side at this price level."""
+        return max(self.slippage_per_side, price * self.slippage_bps / 10_000.0)
+
+
+@dataclass(frozen=True, slots=True)
 class SessionWindow:
     name: str
     tz: str
@@ -93,6 +109,7 @@ class Config:
     allow_exact_matches: bool
     quality: Mapping[str, Any]
     sessions: SessionConfig
+    costs: CostConfig
     source_files: tuple[Path, ...] = field(default=())
 
     # ---- derived paths ----
@@ -219,5 +236,10 @@ def load_config(
         allow_exact_matches=bool(join.get("allow_exact_matches", False)),
         quality=raw.get("quality", {}) or {},
         sessions=session,
+        costs=CostConfig(
+            slippage_per_side=float(_req(raw.get("costs", {}) or {},
+                                         "slippage_per_side", "costs")),
+            slippage_bps=float((raw.get("costs", {}) or {}).get("slippage_bps", 0.0)),
+        ),
         source_files=(path, sessions_path),
     )

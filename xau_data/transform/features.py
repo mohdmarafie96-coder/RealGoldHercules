@@ -23,11 +23,12 @@ from ..storage.schemas import BARS, TS
 
 __all__ = [
     "true_range", "atr_wilder", "add_cost_features", "FEATURES",
-    "DEFAULT_ATR_PERIOD", "DEFAULT_SLIPPAGE_PER_SIDE",
+    "DEFAULT_ATR_PERIOD",
 ]
 
 DEFAULT_ATR_PERIOD: Final[int] = 14
-DEFAULT_SLIPPAGE_PER_SIDE: Final[float] = 0.03
+#: Deliberately absent: there is no default slippage. Callers pass it from
+#: config so a cost assumption can never hide as a module constant.
 
 #: Columns added on top of BARS.
 _ADDED: Final[tuple[tuple[str, pa.DataType], ...]] = (
@@ -111,7 +112,7 @@ def atr_wilder(
 def add_cost_features(
     bars: pa.Table,
     *,
-    slippage_per_side: float = DEFAULT_SLIPPAGE_PER_SIDE,
+    slippage_per_side: float,
     atr_period: int = DEFAULT_ATR_PERIOD,
 ) -> pa.Table:
     """Return ``bars`` with atr, round_trip_cost, cost_to_atr_ratio and cost_bps.

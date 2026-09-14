@@ -75,7 +75,8 @@ def cmd_features(cfg: Config, args: argparse.Namespace) -> int:
         return 1
     tbl = ds.dataset(base, format="parquet", partitioning="hive").to_table()
     tbl = tbl.select([f.name for f in BARS]).cast(BARS).sort_by([("ts_open", "ascending")])
-    feats = add_cost_features(tbl, slippage_per_side=args.slippage,
+    slip = args.slippage if args.slippage is not None else cfg.costs.slippage_per_side
+    feats = add_cost_features(tbl, slippage_per_side=slip,
                               atr_period=args.atr_period)
     out_base = cfg.data_root / "features" / f"symbol={cfg.symbol}" / f"timeframe={args.timeframe}"
     months = sorted({(d.year, d.month) for d in feats["ts_open"].to_pylist()})
@@ -147,7 +148,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     pf = sub.add_parser("features", help="bars -> feature-ready dataset")
     pf.add_argument("--timeframe", default="M15")
-    pf.add_argument("--slippage", type=float, default=0.03, help="per side, USD/oz")
+    pf.add_argument("--slippage", type=float, default=None,
+                    help="per side USD/oz; default comes from configs costs.slippage_per_side")
     pf.add_argument("--atr-period", type=int, default=14, dest="atr_period")
     pf.set_defaults(fn=cmd_features)
 

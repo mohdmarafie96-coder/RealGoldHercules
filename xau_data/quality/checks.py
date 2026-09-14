@@ -59,13 +59,23 @@ def check_non_positive_spread(bars: pa.Table, **_: Any) -> Finding:
                    [_fmt(from_epoch_us(int(ts[i]))) for i in idx[:10]])
 
 
-def check_wide_spread(bars: pa.Table, *, max_spread: float = 25.0, **_: Any) -> Finding:
+def check_wide_spread(bars: pa.Table, *, max_spread_bps: float = 50.0, **_: Any) -> Finding:
+    """Relative, not absolute.
+
+    Spread scales with price: measured 0.32 to 1.03 USD/oz as gold ran from
+    1700 to 5000. A fixed dollar threshold is a window artifact, tight at low
+    prices and useless at high ones.
+    """
     hi = bars["spread_max"].to_numpy(zero_copy_only=False)
-    idx = np.flatnonzero(hi > max_spread)
+    mid = bars["mid_close"].to_numpy(zero_copy_only=False)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        bps = np.where(mid > 0, hi / mid * 10_000.0, np.inf)
+    idx = np.flatnonzero(bps > max_spread_bps)
     ts = bars["ts_open"].cast(pa.int64()).to_numpy(zero_copy_only=False)
     return Finding("implausible_spread", "warn" if idx.size else "info", int(idx.size),
-                   f"{idx.size} bars with max spread above {max_spread}",
-                   [f"{_fmt(from_epoch_us(int(ts[i])))} spread={hi[i]:.3f}" for i in idx[:10]])
+                   f"{idx.size} bars with max spread above {max_spread_bps} bps",
+                   [f"{_fmt(from_epoch_us(int(ts[i])))} spread={hi[i]:.3f} "
+                    f"({bps[i]:.1f} bps)" for i in idx[:10]])
 
 
 def check_ohlc_consistency(bars: pa.Table, **_: Any) -> Finding:

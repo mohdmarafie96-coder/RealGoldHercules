@@ -37,73 +37,85 @@ So this engine has nothing to read. Options, in the order I would pick them:
 I recommend doing both: define `BarSource` so the engine never imports storage
 code directly, and build the bars slice of the data layer in parallel.
 
-### 0.2 Calibration test — measured redesign
+### 0.2 Calibration test — reference computed per fill, never hardcoded
 
-All numbers below are measured from the June 2024 ticks on disk: 4,639,089
-ticks, 1,838 M15 bars, 200,000 simulated random trades with time-based exits at
-4-12 hours and forced exit before rollover.
+Superseded by the full 2021-01..2026-09 history. The earlier "-0.45 within 15%"
+band, and my own "flat absolute spread" finding behind it, were window artifacts
+of a sample that stopped in mid-2024.
 
-**Per-trade dispersion and required sample size.** Detecting a 20% error in a
-0.45 expectancy means resolving delta = 0.09.
+| Year | Price | Mean spread | cost_bps | Median M15 range | cost/range |
+|---|---:|---:|---:|---:|---:|
+| 2021 | 1799.5 | 0.3648 | 2.362 | 1.724 | 0.2464 |
+| 2022 | 1801.5 | 0.3813 | 2.456 | 1.890 | 0.2335 |
+| 2023 | 1943.0 | 0.3443 | 2.082 | 1.650 | 0.2450 |
+| 2024 | 2388.8 | 0.3938 | 1.903 | 2.397 | 0.1893 |
+| 2025 | 3442.5 | 0.6327 | 2.033 | 4.450 | 0.1557 |
+| 2026 | 4566.5 | 0.7678 | 1.814 | 8.780 | 0.0943 |
 
-| Quantity | Value |
-|---|---|
-| Per-trade P&L sigma (unpaired) | 12.0358 |
-| Trades for 95% CI half-width <= 0.09 | 68,700 |
-| Trades for 95% confidence and 80% power | 140,369 |
-| M15 bars in 3 years at 5 days/week | 75,086 |
-| Pooled seeds needed | 2 |
+Spread scales with price: 0.32 to 1.03 USD/oz across the range, while relative
+cost is stable at 1.67-2.20 bps with no trend. **Any cost constant in dollars is
+wrong in some regime.** A `-0.45` sanity band calibrated on 2024 would be 40%
+low against 2026 spreads.
 
-**Pooling is statistically valid, and this was checked rather than assumed.**
-Trades drawn from one price history overlap in time, but a random entry sign
-makes their P&Ls uncorrelated: cov(d_i x_i, d_j x_j) = E[d_i d_j] E[x_i x_j] = 0
-for independent balanced signs. Empirically, over 200 seeds of 5,000 trades,
-the bootstrap standard error was 0.16696 against a naive sigma/sqrt(n) of
-0.17021, a ratio of 0.981. Pooling across seeds is therefore legitimate.
+**The calibration test therefore computes its own reference.** Run
+RandomStrategy twice with the identical seed, costs on and costs off. The paths,
+entries and exits are identical, so the per-trade difference is the cost itself
+and market noise cancels exactly rather than statistically.
 
-**The paired differential is 117x tighter.** Running the same seed with costs on
-and costs off gives identical paths, entries and exits, so the per-trade
-difference is the cost itself.
+The expected value is computed from the bars actually filled on:
 
-| Quantity | Unpaired | Paired |
-|---|---|---|
-| Sigma | 12.0358 | 0.1030 |
-| Trades for CI half-width <= 0.09 | 68,700 | 5 |
-| Trades for 80% power | 140,369 | 10 |
+```
+reference = mean over trades of
+    (spread_at_entry_fill + spread_at_exit_fill) / 2 + 2 * slippage_at(price)
+```
 
-**-0.45 is not a constant, and the test must not hardcode it.** The paired
-measurement came out at -0.4987, and its 95% interval of [-0.5007, -0.4953]
-excludes -0.45. That is the test working, not failing. Cost depends on which
-bars trades actually fill in:
+Verified against real ticks: measured paired difference -0.4987 against a
+per-fill reference of 0.4987, matching to four decimals, while the naive "mean
+spread plus slippage" gave 0.4539. The gap is entirely composition: forced exit
+concentrates exits into wide bars near rollover.
 
-| Spread measure | Value |
-|---|---|
-| Mean over all bars | 0.3939 |
-| Mean at realised entry bars | 0.3941 |
-| Mean at realised exit bars | 0.4834 |
-| Expected cost from realised fills | 0.4987 |
-| Naive mean spread plus slippage | 0.4539 |
+Four assertions, in this order:
 
-Forced exit concentrates exits into the wide bars adjacent to rollover, and
-27.8% of trades in this crude simulation closed on their entry bar. The
-reference value must therefore be computed per fill as
-mean((spread_entry + spread_exit) / 2 + 2 * slippage), which matched the
-measured difference to four decimal places.
+1. **Sharp.** The paired differential equals the per-fill reference within
+   tolerance.
+2. **Precision guard.** The confidence interval half-width is within 20% of the
+   reference. Without this, "the interval contains the target" is vacuous,
+   because a wide enough interval always does, and a broken high-variance engine
+   passes.
+3. **Regime sanity.** Absolute expectancy sits within a band expressed in **bps
+   of price**, not dollars, so it holds at 1700 and at 5000.
+4. **Reporting.** Point estimate, interval, half-width, trade count and the
+   computed reference print every run, pass or fail.
 
-**Proposed test, replacing the fixed band.**
+Sample size, measured: per-trade sigma is 12.0358 unpaired, needing 140,369
+trades for 80% power at a 20% effect. The paired differential cuts sigma to
+0.1030, about 10 trades for the same power. Pooling across seeds is valid
+because random entry signs decorrelate overlapping trades; checked empirically
+at a bootstrap-to-naive standard error ratio of 0.981.
 
-1. Sharp assertion: the paired differential equals the per-fill computed
-   reference, within tolerance.
-2. Precision guard: assert the CI half-width is <= 0.09. This is essential.
-   "The interval contains the target" is vacuous on its own, because a wide
-   enough interval always contains it, so a broken high-variance engine would
-   pass. The precision assertion is what gives the test its power.
-3. Loose sanity band on absolute expectancy, roughly -0.60 to -0.35, to catch
-   gross misconfiguration of the cost model.
-4. The interval, the point estimate, the half-width and the trade count are
-   printed in the report every run, pass or fail.
-5. Confidence intervals by percentile bootstrap over trades, which the
-   independence check above validates.
+`tests/test_no_hardcoded_costs.py` enforces this structurally, failing on any
+dollar-magnitude literal near a cost-shaped identifier anywhere in the package.
+
+### 0.2a Walk-forward must use an EXPANDING window
+
+The volatility regime range across the history is more than 5x, from 8.6% to
+44.2% annualised, **and the extremes cluster in time**. The three most volatile
+months are consecutive, 2026-01, 2026-02 and 2026-03. The calmest sit in 2021
+and 2023.
+
+That clustering makes a fixed rolling window unsafe. A model trained on a
+trailing window ending in 2023 would never have seen an M15 bar wider than
+about 65 USD before meeting one of 287 USD in January 2026. Its volatility
+scaling, stop sizing and position sizing would all be calibrated to a regime
+that no longer exists.
+
+**Therefore: walk-forward validation uses an expanding window. Never a fixed
+rolling one.** Training always starts at the beginning of history and grows;
+only the test fold slides forward. The cost is that early folds are short and
+later folds are dominated by old data, which is the right trade when regime
+shifts are this large and this abrupt.
+
+This is a hard constraint on every downstream experiment, not a default.
 
 ### 0.3 Three smaller corrections
 
