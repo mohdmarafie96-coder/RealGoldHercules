@@ -528,6 +528,28 @@ disagreement signal, not an opportunity. Taking the higher probability or the
 higher expected value would be acting on a signal the data says is internally
 inconsistent.
 
+### 0.2k Pre-registration amendment, 2026-09-14, BEFORE attempt 1
+
+One item of the C.4 model spec cannot be implemented as written, and the
+deviation is recorded here before any fit rather than explained after one.
+
+**Row bagging is DISABLED (`bagging_fraction = 1.0`).** The spec called for
+bagging *by label block* so that overlapping labels cannot leak across a bag
+boundary. LightGBM bags by row and has no group-aware bagging; row bagging on
+this dataset would put the same overlapping label on both sides of a bag
+boundary roughly 27 times over, which is precisely the discipline the spec was
+protecting. Implementing block bagging would mean a hand-rolled boosting loop.
+
+Rather than do either, bagging is turned off and the decorrelation it was there
+to provide comes from `feature_fraction = 0.5` alone. Uniqueness weights
+already carry the overlap correction into the loss, and early stopping runs on
+purged inner folds, so the leak channel bagging was guarding is closed by other
+means. The cost is variance, not bias.
+
+Everything else in C.4 is unchanged: `max_depth 3`, `num_leaves <= 8`,
+`min_child_samples = max(50, 0.05 * train_eff_n)`, `feature_fraction 0.5`,
+`lambda_l2` on an inner grid, native null handling, uniqueness sample weights.
+
 ### 0.2a Walk-forward must use an EXPANDING window
 
 The volatility regime range across the history is more than 5x, from 8.6% to
