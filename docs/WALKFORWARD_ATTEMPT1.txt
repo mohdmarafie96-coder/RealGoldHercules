@@ -1,0 +1,275 @@
+================================================================================
+WALK-FORWARD ATTEMPT 1 OF 3 -- RESULT
+XAUUSD signal research system
+branch: claude/xauusd-data-layer-6d9eg8
+run date: 2026-09-14        produced by: scripts_walkforward.py
+pre-registration: docs/BACKTEST_DESIGN.md 0.2i / 0.2j / 0.2k, dated 2026-09-14
+================================================================================
+
+VERDICT: UNTESTABLE -- coverage 1.6%, against a pre-registered floor of 20%.
+
+  Attempt 1 of 3 is CONSUMED. 0.2i: a sub-floor run "is reported as UNTESTABLE,
+  not as a result, and consumes an attempt unless aborted before the outer
+  windows are scored." The outer windows were scored.
+
+  NOTHING HAS BEEN TUNED between the run and this report. The numbers below are
+  the first and only output of the pre-registered configuration.
+
+--------------------------------------------------------------------------------
+WHY IT IS UNTESTABLE, NOT A FAIL
+--------------------------------------------------------------------------------
+  The model took 1.6% of test bars. Pooled effective n over folds 1-4 is 67.9,
+  against the 573 the 20% floor requires -- 11.8% of the minimum.
+
+    SE at realised coverage        0.3410
+    Bonferroni threshold           2.128 * 0.3410 = 0.7256 ATR
+
+  No edge the label distribution can produce is that large. At this coverage
+  the four PASS conditions are not measurements of anything; they are reported
+  below for completeness and should not be read as evidence either way.
+
+  All four conditions also failed. That is NOT the finding. The finding is that
+  the run could not have passed regardless of the underlying edge.
+
+==============================================================================
+ATTEMPT 1 OF 3 -- PRE-REGISTERED WALK-FORWARD (0.2i)
+==============================================================================
+barriers 4.0/6.0 ATR   features 58   blocks 6 -> folds 5   embargo 96
+always-long comparator, folds 1-4 pooled: +0.0398 ATR (pre-registered +0.0398)
+
+==============================================================================
+C.6  PER-FOLD REPORT
+==============================================================================
+
+FOLD 0  [FOLD 0 -- REPORTED SEPARATELY, 0.2g: excluded from headline]
+  train 18,678 labels (eff 730.9)   test 18,781 (eff 714.0)   purged 18  embargoed 78
+  realised cost c = 0.2232 ATR    min_child_samples = 50
+  taken 1,073 / 18,781 = 5.7% coverage (eff n 46.3)   dual-fire 0 (0.00%)
+  NET   +0.0375 ATR      GROSS +0.2158 ATR      always-long -0.2572
+  E_excess +0.2947 ATR
+  long  thr 0.5391  breakeven 0.4223  lambda_l2 50  k 58  inner E +0.3221
+  short thr 0.8280  breakeven 0.4223  lambda_l2 1  k 20  inner E +2.4469
+  win rate 47.62%  (fold breakeven 42.23%)
+  WINNER exit-reason mix: target 109 (21.3%)  stop 0 (0.0%)  time 174 (34.1%)  rollover 228 (44.6%)
+  side split: long 1,052  short 21
+
+FOLD 1
+  train 37,463 labels (eff 1443.2)   test 18,776 (eff 732.3)   purged 17  embargoed 79
+  realised cost c = 0.2356 ATR    min_child_samples = 72
+  taken 773 / 18,776 = 4.1% coverage (eff n 48.1)   dual-fire 0 (0.00%)
+  NET   +0.1338 ATR      GROSS +0.3014 ATR      always-long -0.2350
+  E_excess +0.3688 ATR
+  long  thr 0.5140  breakeven 0.4236  lambda_l2 50  k 10  inner E +0.1501
+  short thr 0.6102  breakeven 0.4236  lambda_l2 50  k 10  inner E +3.3789
+  win rate 44.76%  (fold breakeven 42.36%)
+  WINNER exit-reason mix: target 39 (11.3%)  stop 0 (0.0%)  time 43 (12.4%)  rollover 264 (76.3%)
+  side split: long 766  short 7
+
+FOLD 2
+  train 56,239 labels (eff 2177.3)   test 18,771 (eff 733.3)   purged 44  embargoed 52
+  realised cost c = 0.1923 ATR    min_child_samples = 109
+  taken 32 / 18,771 = 0.2% coverage (eff n 2.4)   dual-fire 0 (0.00%)
+  NET   -1.0761 ATR      GROSS -0.9579 ATR      always-long +0.2161
+  E_excess -1.2923 ATR
+  long  thr 0.6143  breakeven 0.4192  lambda_l2 10  k 40  inner E +0.2682
+  short thr 0.7037  breakeven 0.4192  lambda_l2 1  k 10  inner E +0.9935
+  win rate 43.75%  (fold breakeven 41.92%)
+  WINNER exit-reason mix: target 1 (7.1%)  stop 0 (0.0%)  time 0 (0.0%)  rollover 13 (92.9%)
+  side split: long 32  short 0
+
+FOLD 3
+  train 75,010 labels (eff 2910.2)   test 18,767 (eff 706.9)   purged 37  embargoed 59
+  realised cost c = 0.1666 ATR    min_child_samples = 146
+  taken 396 / 18,767 = 2.1% coverage (eff n 16.8)   dual-fire 0 (0.00%)
+  NET   -0.5421 ATR      GROSS -0.3882 ATR      always-long +0.2221
+  E_excess -0.7642 ATR
+  long  thr 0.5754  breakeven 0.4167  lambda_l2 50  k 40  inner E +1.0937
+  short thr 0.6339  breakeven 0.4167  lambda_l2 10  k 10  inner E +0.6067
+  win rate 40.40%  (fold breakeven 41.67%)
+  WINNER exit-reason mix: target 23 (14.4%)  stop 0 (0.0%)  time 35 (21.9%)  rollover 102 (63.8%)
+  side split: long 312  short 84
+
+FOLD 4
+  train 93,777 labels (eff 3615.6)   test 18,761 (eff 690.8)   purged 26  embargoed 70
+  realised cost c = 0.0888 ATR    min_child_samples = 181
+  taken 14 / 18,761 = 0.1% coverage (eff n 0.6)   dual-fire 0 (0.00%)
+  NET   -0.9962 ATR      GROSS -0.8804 ATR      always-long -0.0425
+  E_excess -0.9537 ATR
+  long  thr 0.6454  breakeven 0.4089  lambda_l2 50  k 58  inner E +0.7866
+  short thr 0.6539  breakeven 0.4089  lambda_l2 1  k 10  inner E +1.1484
+  win rate 21.43%  (fold breakeven 40.89%)
+  WINNER exit-reason mix: target 2 (66.7%)  stop 0 (0.0%)  time 1 (33.3%)  rollover 0 (0.0%)
+  side split: long 0  short 14
+
+==============================================================================
+THE RESULT -- the single pre-registered scalar (0.2i)
+==============================================================================
+  model  Wnet (folds 1-4 pooled)   -0.0863 ATR
+  always-long, same bars           +0.0398 ATR
+  E_excess                         -0.1262 ATR
+  coverage                         1.6%   effective n 67.9   label sd 2.8088
+  SE at realised coverage          0.3410
+  one-sided lower bound (z=2.128)  -0.8518
+
+  per-fold E_excess:  f0 +0.2947   f1 +0.3688   f2 -1.2923   f3 -0.7642   f4 -0.9537
+
+  condition 1  E_excess - 2.128*SE > 0     FAIL   (-0.8518)
+  condition 2  E_excess >= +0.15           FAIL   (-0.1262)
+  condition 3  >=3 of 4 folds positive     FAIL   (1 of 4)
+  condition 4  no fold worse than -0.30    FAIL   (worst -1.2923)
+
+  VERDICT: UNTESTABLE (coverage below the 20% floor)
+
+==============================================================================
+C.7  GUARDS
+==============================================================================
+
+1. SHUFFLED-LABEL CONTROL (train targets permuted, test real)
+   Wnet -0.4795   E_excess -0.5194   coverage 0.3%
+   pooled label mean, both sides, same bars: -0.1233
+   -> a leaking pipeline would show a positive edge here. CLEAN
+
+2. TIME-OF-DAY ABLATION (8 session features dropped)
+   Wnet -0.4901   E_excess -0.5299   coverage 0.7%
+   headline E_excess -0.1262  ->  ablated -0.5299   delta -0.4037
+
+3. COST-REGIME SPLIT
+   folds 1-2 (c = 0.2139):  Wnet +0.0765  AL -0.0093  E_excess +0.0857
+   folds 3-4 (c = 0.1277):  Wnet -0.5582  AL +0.0913  E_excess -0.6495
+
+4. GEOMETRY ROBUSTNESS (reported, never selected on -- 0.2h)
+   geometry       E_excess   coverage       Wnet         AL
+   4.0/6.0         -0.1262       1.6%    -0.0863    +0.0398
+   3/4.5           -0.2360       0.4%    -0.2525    -0.0164
+   6/9             +0.5167       0.1%    +0.5813    +0.0646
+
+==============================================================================
+HOW TO READ A FAIL (0.2i)
+==============================================================================
+  A FAIL means: no edge above roughly 0.25 ATR was demonstrated on this
+  sample.
+  A FAIL does NOT mean: no edge exists.
+  At the realised coverage of 1.6%, the joint power against a true
+  edge of +0.15 ATR is well below 50%, so a true edge at the economic
+  floor fails this test more often than it passes.
+
+================================================================================
+READING THE RUN
+================================================================================
+
+1. THE DEGENERATE THRESHOLD -- the proximate cause
+
+   Inner-fold expectancies reached +3.3789 (fold 1 short), +2.4469 (fold 0
+   short) and +1.1484 (fold 4 short). No trading rule on this label set earns
+   +3.38 ATR per trade. Those are the argmax of ~100 candidate thresholds over
+   a noisy inner sample, landing on a handful of inner-validation winners.
+
+   select_threshold maximises expectancy with only a min_take=30 floor. On
+   inner folds of roughly 10,000 rows that is 0.3% -- effectively no
+   constraint. The selector therefore degenerates toward the most extreme
+   threshold it can find, and coverage collapses.
+
+   The 20% coverage floor was pre-registered in 0.2i as a REPORTING rule. It
+   was never wired into 0.2j as a SELECTION constraint. Attempt 1 is the
+   consequence.
+
+2. THE UNTRANSFERABLE THRESHOLD -- a second, independent defect
+
+   The threshold is chosen as an ABSOLUTE probability on inner-validation
+   predictions, then applied to outer-test predictions from a DIFFERENT model
+   -- one refitted on the full outer training window. Those two probability
+   distributions are not calibrated to each other, so the same numeric
+   threshold selects a different quantile on each.
+
+   Fold 2 is the clearest case: threshold 0.6143 took 32 of 18,771 bars, 0.2%.
+   Fold 4: 0.6454 took 14 bars, 0.1%.
+
+   This defect is independent of defect 1 and would survive fixing it.
+
+3. WHAT THE GUARDS DO AND DO NOT SAY
+
+   SHUFFLED-LABEL CONTROL is the one guard that returns usable information.
+   Shuffled training targets give Wnet -0.4795; the real run gives -0.0863.
+   The real run beats its own shuffled control by 0.39 ATR. THE PIPELINE IS
+   NOT LEAKING, and the models are not pure noise. At 1.6% coverage this is
+   not evidence of an edge, but it does rule out the failure mode the guard
+   exists to detect.
+
+   TIME-OF-DAY ABLATION cannot be read. Dropping the session features moved
+   coverage from 1.6% to 0.7%; the -0.4037 delta is a comparison between two
+   samples of 68 and 29 effective observations. Inconclusive, not negative.
+
+   COST-REGIME SPLIT cannot be read. Folds 1-2 +0.0857 against folds 3-4
+   -0.6495 looks like a cost story and is not: folds 2 and 4 took 32 and 14
+   trades. This is sampling noise wearing a pattern.
+
+   GEOMETRY ROBUSTNESS cannot be read, and the 6.0/9.0 row is actively
+   misleading: +0.5167 at 0.1% coverage is a handful of trades. It MUST NOT be
+   read as the wide geometry working. Under 0.2h no geometry result may move
+   the headline in any case.
+
+4. THE ONE SUBSTANTIVE SIGNAL IN THE PER-FOLD BLOCK
+
+   The winner exit-reason mix, which 0.2j added precisely to catch this:
+
+     fold 0   target 21.3%   time 34.1%   rollover 44.6%
+     fold 1   target 11.3%   time 12.4%   rollover 76.3%
+     fold 2   target  7.1%   time  0.0%   rollover 92.9%
+     fold 3   target 14.4%   time 21.9%   rollover 63.8%
+
+   WINS ARE MOSTLY SMALL ROLLOVER EXITS, NOT TARGET HITS. On the pre-registered
+   reading of 0.2j: the barrier geometry is not doing the work, and whatever
+   expectancy appears rests on the continuous tail rather than on the trade
+   thesis. This holds across every fold with enough trades to look at, and it
+   is the one pattern here not obviously explained by small samples.
+
+   ("stop 0.0%" in every fold is definitional, not a finding: a stop exit is
+   -4.01 ATR net and can never be a winner.)
+
+5. DUAL-FIRE NEVER BOUND
+
+   Zero dual fires in all five folds, in every configuration run. The rule
+   cost nothing and decided nothing. Consistent with the pre-run measurement
+   that no bar has both sides net-positive.
+
+6. SIDE IMBALANCE
+
+   The model is overwhelmingly long: fold 0 1,052/21, fold 1 766/7, fold 2
+   32/0. Fold 4 inverts to 0/14. Given always-long is the comparator, a
+   long-dominated selection is exactly the behaviour 0.2f exists to police,
+   and at this coverage it cannot be judged.
+
+================================================================================
+STATUS AND WHAT IS NOT BEING DONE
+================================================================================
+
+  ATTEMPTS: 1 of 3 consumed. Two remain.
+
+  NOTHING HAS BEEN CHANGED IN RESPONSE TO THIS RUN. Both defects above are
+  described, not fixed. Fixing either one alters the pre-registered procedure,
+  which is a decision for the principal, not for the person who just saw the
+  result -- that sequence is how pre-registration stops meaning anything.
+
+  The two candidate amendments, stated for a ruling and NOT applied:
+
+    A. Wire the coverage floor into SELECTION, not just reporting: constrain
+       select_threshold to leave at least some minimum fraction of bars taken.
+       Fixes defect 1.
+
+    B. Select a COVERAGE QUANTILE on inner folds rather than an absolute
+       probability, and map that quantile onto the outer-test prediction
+       distribution. Fixes defect 2 and makes the threshold transferable.
+
+  Both are corrections to a procedure that provably could not produce a
+  testable answer, not adjustments made after seeing an unfavourable one -- the
+  run returned UNTESTABLE, so there is no favourable-or-unfavourable to have
+  reacted to. That distinction is the whole argument for making them, and it
+  is still the principal's call.
+
+  WHAT MUST NOT HAPPEN: neither amendment may be chosen by trying both and
+  keeping the better headline. Whichever is approved is fixed before attempt 2
+  runs, and attempt 2 is then reported exactly as attempt 1 was.
+
+================================================================================
+END
+================================================================================

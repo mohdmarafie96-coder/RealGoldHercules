@@ -487,6 +487,26 @@ exceeds anything the label distribution can plausibly deliver. Such a run is
 reported as **untestable**, not as a result, and does not consume an attempt
 only if it is aborted before the outer test windows are scored.
 
+### 0.2i-LOG Attempt log
+
+| attempt | date | configuration | verdict | E_excess | coverage |
+|---:|---|---|---|---:|---:|
+| 1 | 2026-09-14 | pre-registered, as written | **UNTESTABLE** | −0.1262 | 1.6% |
+| 2 | — | — | — | — | — |
+| 3 | — | — | — | — | — |
+
+**Attempt 1 is consumed.** Coverage 1.6% against the 20% floor; pooled
+effective n 67.9 against the 573 the floor requires. Full report in
+`docs/WALKFORWARD_ATTEMPT1.txt`, raw output in
+`data/_reports/walkforward_attempt1.txt`.
+
+Two procedural defects were identified from the run and are **described, not
+fixed**: the threshold selector has no coverage constraint (0.2i's floor was
+written as a reporting rule and never wired into 0.2j's selection), and the
+threshold is chosen as an absolute probability on inner-validation predictions
+then applied to a differently-calibrated outer-test distribution. Any amendment
+requires an explicit, dated decision recorded here **before** attempt 2 runs.
+
 ### 0.2j Threshold selection and the dual-fire rule
 
 **Threshold objective — expectancy, not P(net>0).**
