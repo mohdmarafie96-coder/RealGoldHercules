@@ -200,7 +200,7 @@ def ingest_range(
                 hashlib.sha256(payload or b"").hexdigest() if payload else None,
                 len(rows), datetime.now(UTC), err,
             ))
-            if progress and summary.hours_considered % 200 == 0:
+            if progress and summary.hours_considered % 50 == 0:
                 print(f"  {summary.hours_considered} hours: "
                       f"fetched={summary.fetched} skip={summary.skipped} "
                       f"empty={summary.empty} miss={summary.missing} "
