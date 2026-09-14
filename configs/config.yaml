@@ -24,11 +24,11 @@ ingest:
     base_url: https://datafeed.dukascopy.com/datafeed
     # Dukascopy's month path component is ZERO-INDEXED (January = 00).
     month_zero_indexed: true
-    requests_per_second: 0.2
+    requests_per_second: 0.5
     max_concurrency: 2
-    max_attempts: 14
-    backoff_base_seconds: 3.0
-    backoff_max_seconds: 180.0
+    max_attempts: 20
+    backoff_base_seconds: 2.0
+    backoff_max_seconds: 20.0
     connect_timeout_seconds: 25.0
     read_timeout_seconds: 60.0
     # Keep the raw payloads so a decoder fix can be replayed without refetching.
