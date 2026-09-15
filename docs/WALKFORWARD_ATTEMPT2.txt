@@ -1,0 +1,335 @@
+================================================================================
+WALK-FORWARD ATTEMPT 2 OF 3 -- RESULT
+XAUUSD signal research system
+branch: claude/xauusd-data-layer-6d9eg8
+run date: 2026-09-15        produced by: scripts_walkforward.py
+pre-registration: BACKTEST_DESIGN.md 0.2i / 0.2j / 0.2k
+amendments A, B, C approved and recorded 2026-09-15 BEFORE this run
+================================================================================
+
+VERDICT: FAIL -- 3 of 4 conditions PASS, condition 1 fails.
+
+  E_excess    +0.1758 ATR        coverage 37.5%   effective n 1,165.0
+  SE           0.1100            lower bound (z=2.128)  -0.0583
+  shortfall    0.0583 ATR below the Bonferroni threshold of +0.2341
+
+  Attempt 2 of 3 is CONSUMED. One attempt remains.
+
+  NOTHING WAS TUNED between the run and this report.
+
+  This is the case 0.2i anticipated in writing: the point estimate clears the
+  economic floor, the significance test does not. It is UNDERPOWERED, NOT
+  REFUTED. See "HOW TO READ THIS" below before drawing any conclusion.
+
+--------------------------------------------------------------------------------
+THE FOUR CONDITIONS
+--------------------------------------------------------------------------------
+  1  E_excess - 2.128*SE > 0      FAIL    -0.0583
+  2  E_excess >= +0.15            PASS    +0.1758
+  3  >=3 of 4 folds positive      PASS    3 of 4  (f1 +0.1347  f2 +0.1888
+                                                   f3 -0.2207  f4 +0.4852)
+  4  no fold worse than -0.30     PASS    worst -0.2207
+
+  Fold 0, excluded from the headline per 0.2g: E_excess +0.1149.
+
+--------------------------------------------------------------------------------
+THE AMENDMENTS WORKED
+--------------------------------------------------------------------------------
+  coverage      attempt 1  1.6%   ->  attempt 2  37.5%      (floor 20%)
+  effective n   attempt 1   67.9  ->  attempt 2  1,165.0    (floor needs 573)
+  SE            attempt 1  0.3410 ->  attempt 2  0.1100
+
+  Selected take-fraction was q = 0.20 on nine of ten side-fold pairs and 0.30
+  once (fold 4 long). Inner expectancies now run -0.08 to +0.31 ATR, against
+  attempt 1's +3.38 -- the degenerate argmax is gone.
+
+  The pre-flight gate (C) passed every fold; no fold aborted. Projected
+  coverage 36.8% to 47.2%, all above the floor.
+
+  ONE PREDICTION I MADE WAS ONLY HALF RIGHT. In recording amendment B I said
+  the residual inner-versus-final calibration gap would err toward MORE
+  coverage than q, the safe side of a floor. Realised against projected:
+
+    fold 0   projected 36.8%   realised 23.1%    LESS
+    fold 1   projected 36.8%   realised 25.4%    LESS
+    fold 2   projected 37.4%   realised 24.8%    LESS
+    fold 3   projected 37.8%   realised 41.9%    more
+    fold 4   projected 47.2%   realised 57.9%    more
+
+  The drift runs both ways and the projection is not tight. Every fold still
+  cleared the floor, so the gate did its job, but the stated direction of the
+  error was wrong in three folds of five.
+
+==============================================================================
+ATTEMPT 2 OF 3 -- PRE-REGISTERED WALK-FORWARD (0.2i + amendments A/B/C)
+==============================================================================
+barriers 4.0/6.0 ATR   features 58   blocks 6 -> folds 5   embargo 96
+always-long comparator, folds 1-4 pooled: +0.0398 ATR (pre-registered +0.0398)
+
+==============================================================================
+C.6  PER-FOLD REPORT
+==============================================================================
+
+FOLD 0  [FOLD 0 -- REPORTED SEPARATELY, 0.2g: excluded from headline]
+  train 18,678 labels (eff 730.9)   test 18,781 (eff 714.0)   purged 18  embargoed 78
+  realised cost c = 0.2232 ATR    min_child_samples = 50
+  taken 4,347 / 18,781 = 23.1% coverage (eff n 196.3)   dual-fire 56 (0.30%)
+  NET   -0.1423 ATR      GROSS +0.0561 ATR      always-long -0.2572
+  E_excess +0.1149 ATR
+  pre-flight projected coverage 36.8% (floor 20%)
+  long  q 0.20  tau 0.4767  breakeven 0.4223  lambda_l2 10  k 10  inner E -0.0276
+  short q 0.20  tau 0.5781  breakeven 0.4223  lambda_l2 1  k 40  inner E -0.0607
+  win rate 44.58%  (fold breakeven 42.23%)
+  WINNER exit-reason mix: target 735 (37.9%)  stop 0 (0.0%)  time 513 (26.5%)  rollover 690 (35.6%)
+                         neutral baseline: target 46.2%  time 24.4%  rollover 29.4%   (0.2i-NOTE)
+  side split: long 3,470  short 877
+
+FOLD 1
+  train 37,463 labels (eff 1443.2)   test 18,776 (eff 732.3)   purged 17  embargoed 79
+  realised cost c = 0.2356 ATR    min_child_samples = 72
+  taken 4,778 / 18,776 = 25.4% coverage (eff n 212.4)   dual-fire 83 (0.44%)
+  NET   -0.1003 ATR      GROSS +0.1356 ATR      always-long -0.2350
+  E_excess +0.1347 ATR
+  pre-flight projected coverage 36.8% (floor 20%)
+  long  q 0.20  tau 0.4944  breakeven 0.4236  lambda_l2 1  k 10  inner E -0.0797
+  short q 0.20  tau 0.4834  breakeven 0.4236  lambda_l2 50  k 10  inner E +0.3133
+  win rate 41.86%  (fold breakeven 42.36%)
+  WINNER exit-reason mix: target 981 (49.0%)  stop 0 (0.0%)  time 373 (18.6%)  rollover 646 (32.3%)
+                         neutral baseline: target 46.2%  time 24.4%  rollover 29.4%   (0.2i-NOTE)
+  side split: long 1,523  short 3,255
+
+FOLD 2
+  train 56,239 labels (eff 2177.3)   test 18,771 (eff 733.3)   purged 44  embargoed 52
+  realised cost c = 0.1923 ATR    min_child_samples = 109
+  taken 4,649 / 18,771 = 24.8% coverage (eff n 212.6)   dual-fire 150 (0.80%)
+  NET   +0.4050 ATR      GROSS +0.5714 ATR      always-long +0.2161
+  E_excess +0.1888 ATR
+  pre-flight projected coverage 37.4% (floor 20%)
+  long  q 0.20  tau 0.4777  breakeven 0.4192  lambda_l2 10  k 20  inner E -0.0649
+  short q 0.20  tau 0.4847  breakeven 0.4192  lambda_l2 10  k 10  inner E -0.0213
+  win rate 48.46%  (fold breakeven 41.92%)
+  WINNER exit-reason mix: target 904 (40.1%)  stop 0 (0.0%)  time 480 (21.3%)  rollover 869 (38.6%)
+                         neutral baseline: target 46.2%  time 24.4%  rollover 29.4%   (0.2i-NOTE)
+  side split: long 2,581  short 2,068
+
+FOLD 3
+  train 75,010 labels (eff 2910.2)   test 18,767 (eff 706.9)   purged 37  embargoed 59
+  realised cost c = 0.1666 ATR    min_child_samples = 146
+  taken 7,872 / 18,767 = 41.9% coverage (eff n 320.0)   dual-fire 445 (2.37%)
+  NET   +0.0014 ATR      GROSS +0.1747 ATR      always-long +0.2221
+  E_excess -0.2207 ATR
+  pre-flight projected coverage 37.8% (floor 20%)
+  long  q 0.20  tau 0.4555  breakeven 0.4167  lambda_l2 50  k 10  inner E +0.1159
+  short q 0.20  tau 0.4750  breakeven 0.4167  lambda_l2 50  k 10  inner E +0.0719
+  win rate 45.40%  (fold breakeven 41.67%)
+  WINNER exit-reason mix: target 1,244 (34.8%)  stop 0 (0.0%)  time 1,061 (29.7%)  rollover 1,269 (35.5%)
+                         neutral baseline: target 46.2%  time 24.4%  rollover 29.4%   (0.2i-NOTE)
+  side split: long 4,915  short 2,957
+
+FOLD 4
+  train 93,777 labels (eff 3615.6)   test 18,761 (eff 690.8)   purged 26  embargoed 70
+  realised cost c = 0.0888 ATR    min_child_samples = 181
+  taken 10,862 / 18,761 = 57.9% coverage (eff n 419.9)   dual-fire 257 (1.37%)
+  NET   +0.4427 ATR      GROSS +0.5442 ATR      always-long -0.0425
+  E_excess +0.4852 ATR
+  pre-flight projected coverage 47.2% (floor 20%)
+  long  q 0.30  tau 0.4531  breakeven 0.4089  lambda_l2 50  k 10  inner E +0.2083
+  short q 0.20  tau 0.4688  breakeven 0.4089  lambda_l2 10  k 10  inner E +0.0772
+  win rate 48.31%  (fold breakeven 40.89%)
+  WINNER exit-reason mix: target 2,017 (38.4%)  stop 0 (0.0%)  time 1,690 (32.2%)  rollover 1,540 (29.4%)
+                         neutral baseline: target 46.2%  time 24.4%  rollover 29.4%   (0.2i-NOTE)
+  side split: long 6,763  short 4,099
+
+==============================================================================
+THE RESULT -- the single pre-registered scalar (0.2i)
+==============================================================================
+  model  Wnet (folds 1-4 pooled)   +0.2156 ATR
+  always-long, same bars           +0.0398 ATR
+  E_excess                         +0.1758 ATR
+  coverage                         37.5%   effective n 1165.0   label sd 3.7552
+  SE at realised coverage          0.1100
+  one-sided lower bound (z=2.128)  -0.0583
+
+  per-fold E_excess:  f0 +0.1149   f1 +0.1347   f2 +0.1888   f3 -0.2207   f4 +0.4852
+
+  condition 1  E_excess - 2.128*SE > 0     FAIL   (-0.0583)
+  condition 2  E_excess >= +0.15           PASS   (+0.1758)
+  condition 3  >=3 of 4 folds positive     PASS   (3 of 4)
+  condition 4  no fold worse than -0.30    PASS   (worst -0.2207)
+
+  VERDICT: FAIL
+
+==============================================================================
+C.7  GUARDS
+==============================================================================
+
+1. SHUFFLED-LABEL CONTROL (train targets permuted, test real)
+   Wnet -0.0145   E_excess -0.0544   coverage 40.8%
+   pooled label mean, both sides, same bars: -0.1233
+   -> a leaking pipeline would show a positive edge here. CLEAN
+
+2. TIME-OF-DAY ABLATION (8 session features dropped)
+   Wnet +0.1009   E_excess +0.0611   coverage 44.0%
+   headline E_excess +0.1758  ->  ablated +0.0611   delta -0.1147
+
+3. COST-REGIME SPLIT
+   folds 1-2 (c = 0.2139):  Wnet +0.1525  AL -0.0093  E_excess +0.1618
+   folds 3-4 (c = 0.1277):  Wnet +0.2519  AL +0.0913  E_excess +0.1605
+
+4. GEOMETRY ROBUSTNESS (reported, never selected on -- 0.2h)
+   geometry       E_excess   coverage       Wnet         AL
+   4.0/6.0         +0.1758      37.5%    +0.2156    +0.0398
+   3/4.5           +0.1154      45.7%    +0.0990    -0.0164
+   6/9             -0.0228      38.6%    +0.0418    +0.0646
+
+==============================================================================
+HOW TO READ A FAIL (0.2i)
+==============================================================================
+  A FAIL means: no edge above roughly 0.25 ATR was demonstrated on this
+  sample.
+  A FAIL does NOT mean: no edge exists.
+  At the realised coverage of 37.5%, the joint power against a true
+  edge of +0.15 ATR is well below 50%, so a true edge at the economic
+  floor fails this test more often than it passes.
+
+================================================================================
+HOW TO READ THIS
+================================================================================
+
+1. THE OBSERVED EFFECT IS AT A SIZE THIS SAMPLE CANNOT CERTIFY
+
+     observed E_excess          +0.1758 ATR
+     observed / SE               1.598 sigma   (one-sided p = 0.0551)
+     Bonferroni threshold        2.128 sigma
+     edge needed for 80% power  +0.3267 ATR at this SE
+
+   IF THE TRUTH WERE EXACTLY THE OBSERVED +0.1758, THIS TEST WOULD PASS ONLY
+   29.8% OF THE TIME. The result is not close to the line by accident; it is
+   the expected outcome of measuring a +0.18 effect with an instrument built to
+   resolve +0.33.
+
+   To clear the threshold at this effect size would need effective n = 2,067,
+   which is 72.2% coverage. The model took 37.5%.
+
+   One-sided p = 0.0551 would clear an uncorrected alpha of 0.05. It does not
+   clear the three-attempt Bonferroni correction, which was fixed in advance
+   precisely so that this kind of near-miss could not be argued into a pass
+   after the fact.
+
+2. THE PRE-REGISTERED LANGUAGE, WHICH APPLIES UNCHANGED
+
+     A FAIL MEANS: no edge above roughly 0.25 ATR was demonstrated on this
+     sample.
+
+     A FAIL DOES NOT MEAN: no edge exists.
+
+3. THE HORIZON-MISMATCH HYPOTHESIS DID NOT REPRODUCE
+
+   0.2i-NOTE, recorded before this run, stated that IF the winner exit-reason
+   anomaly reproduced above the coverage floor it would be a finding about
+   horizon mismatch. It did not reproduce.
+
+     target share of winners      attempt 1        attempt 2     neutral
+     -------------------------------------------------------------------
+     fold 0                          21.3%            37.9%       46.2%
+     fold 1                          11.3%            49.0%       46.2%
+     fold 2                           7.1%            40.1%       46.2%
+     fold 3                          14.4%            34.8%       46.2%
+     fold 4                          66.7% (3 trades) 38.4%       46.2%
+
+     rollover share               44.6-92.9%       29.4-38.6%     29.4%
+
+   At coverage above the floor the mix sits close to the neutral baseline,
+   fold 1 slightly above it. THERE IS NO HORIZON-MISMATCH FINDING. Attempt 1's
+   anomaly was an artifact of 14 to 1,073 trades, exactly as the note allowed
+   for. The geometry stays pre-registered at 4.0/6.0 and nothing is acted on.
+
+   This is what pre-registering the interpretation buys: the hypothesis was
+   stated with its neutral baseline measured in advance, so its failure to
+   reproduce is informative rather than forgettable.
+
+4. THE GUARDS, NOW READABLE -- ALL FOUR ABOVE THE FLOOR
+
+   SHUFFLED-LABEL CONTROL. Real +0.1758 against shuffled -0.0544, a gap of
+   0.23 ATR. The pipeline does not leak and the models are not noise.
+   One detail worth stating rather than burying: the shuffled run's Wnet of
+   -0.0145 sits 0.109 above the -0.1233 pooled two-sided label mean that pure
+   random selection should give. At 40.8% coverage the SE is about 0.105, so
+   that is 1.04 sigma -- within noise, and not evidence of anything. It is
+   recorded because a reader checking the arithmetic would otherwise find it
+   themselves and wonder.
+
+   TIME-OF-DAY ABLATION. THE MOST SUBSTANTIVE DIAGNOSTIC IN THIS RUN.
+
+     headline (58 features)          +0.1758
+     session features dropped        +0.0611
+     delta                           -0.1147
+
+   Roughly 65% of the measured excess disappears when the eight session and
+   clock features are removed. Both runs sit above the coverage floor, so
+   unlike attempt 1 this comparison is readable. The delta is of the order of
+   one SE, so it is SUGGESTIVE, NOT CONCLUSIVE -- but the direction is clear
+   and it is the single largest qualification on the headline. The min_bars
+   mask removed the mechanism behind time-of-day conditioning in the LABEL; it
+   did not remove the model's reliance on time-of-day FEATURES.
+
+   COST-REGIME SPLIT. The cleanest positive result in the run.
+
+     folds 1-2   c = 0.2139    E_excess +0.1618
+     folds 3-4   c = 0.1277    E_excess +0.1605
+
+   The cost regime nearly halves and the excess moves by 0.0013 ATR. Whatever
+   is being measured is NOT cost decay wearing a disguise, which is exactly
+   what 0.2b and 0.2d were written to detect.
+
+   GEOMETRY ROBUSTNESS, reported and never selected on (0.2h).
+
+     4.0/6.0   +0.1758   coverage 37.5%   (pre-registered)
+     3.0/4.5   +0.1154   coverage 45.7%
+     6.0/9.0   -0.0228   coverage 38.6%
+
+   Mixed. 0.2h's overfitting diagnostic is "an edge present ONLY at 4/6". The
+   effect survives at 3.0/4.5 at about two thirds the size and does not survive
+   at 6.0/9.0. That is neither the clean pass nor the clean failure of the
+   diagnostic. It is reported as it stands; the geometry does not move.
+
+5. FOLD 3 IS THE DISSENTING FOLD
+
+   E_excess -0.2207, the only negative, and condition 4's worst case at a
+   threshold of -0.30. Its coverage was 41.9%, its cost 0.1666, and its winner
+   mix the least target-heavy of the four at 34.8%. Nothing in the run explains
+   it, and with a per-fold SE near 0.21 at that coverage it is about one sigma
+   from zero. It is noted, not explained away.
+
+================================================================================
+STATUS
+================================================================================
+
+  ATTEMPTS: 2 of 3 consumed. ONE REMAINS.
+
+  NOTHING HAS BEEN CHANGED IN RESPONSE TO THIS RUN, and I am proposing no
+  amendment. Attempt 2 ran the pre-registered procedure on a configuration that
+  could and did produce an answer. The answer is FAIL at +0.1758 with a lower
+  bound of -0.0583.
+
+  A THIRD ATTEMPT CANNOT RESCUE THIS RESULT BY REPEATING IT. The Bonferroni
+  correction is already spent on three attempts; a third run of a similar
+  configuration producing a similar number would still fail, because the
+  shortfall is a power problem and not a tuning problem. The only things that
+  would change the answer are more effective sample or a materially larger
+  edge, and neither is obtained by re-running.
+
+  What the last attempt could honestly be spent on is a question for the
+  principal, not for me. The options I can see, none of them started:
+
+    - Spend it on nothing. Report FAIL at +0.1758, underpowered, and stop.
+      This is the outcome the pre-registration was designed to make speakable.
+    - Spend it after the tick slice lands, so the pessimistic-resolver bias
+      (D1) is measured rather than carried as an unquantified drag on every
+      net figure here.
+
+  THE ONE THING THAT MUST NOT HAPPEN: choosing between those by trying them.
+
+================================================================================
+END
+================================================================================

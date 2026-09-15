@@ -571,11 +571,28 @@ the overfitting 0.2h exists to prevent.
 
 ### 0.2i-LOG Attempt log
 
-| attempt | date | configuration | verdict | E_excess | coverage |
-|---:|---|---|---|---:|---:|
-| 1 | 2026-09-14 | pre-registered, as written | **UNTESTABLE** | −0.1262 | 1.6% |
-| 2 | — | — | — | — | — |
-| 3 | — | — | — | — | — |
+| attempt | date | configuration | verdict | E_excess | coverage | eff n |
+|---:|---|---|---|---:|---:|---:|
+| 1 | 2026-09-14 | pre-registered, as written | **UNTESTABLE** | −0.1262 | 1.6% | 67.9 |
+| 2 | 2026-09-15 | + amendments A, B, C | **FAIL** (3 of 4 conditions pass) | **+0.1758** | 37.5% | 1,165.0 |
+| 3 | — | unspent | — | — | — | — |
+
+Attempt 2: conditions 2, 3 and 4 pass; condition 1 fails at a lower bound of
+−0.0583, a shortfall of 0.0583 ATR. One-sided p = 0.0551, which clears an
+uncorrected 0.05 and not the three-attempt correction fixed in advance. Were
+the truth exactly the observed +0.1758, this test would pass 29.8% of the time;
+clearing it would need effective n 2,067, i.e. 72.2% coverage. **Underpowered,
+not refuted.** Full report in `docs/WALKFORWARD_ATTEMPT2.txt`.
+
+The 0.2i-NOTE horizon-mismatch hypothesis **did not reproduce**: target share of
+winners ran 34.8–49.0% against the 46.24% neutral baseline, versus 7.1–21.3% in
+attempt 1. No horizon-mismatch finding; the geometry does not move.
+
+Largest qualification on the headline: the time-of-day ablation takes E_excess
+from +0.1758 to +0.0611, so roughly 65% of the measured excess rides on the
+eight session and clock features. Both arms are above the coverage floor, so
+the comparison is readable; the delta is of order one SE, so it is suggestive
+rather than conclusive.
 
 **Attempt 1 is consumed.** Coverage 1.6% against the 20% floor; pooled
 effective n 67.9 against the 573 the floor requires. Full report in
