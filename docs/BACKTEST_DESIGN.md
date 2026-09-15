@@ -487,6 +487,88 @@ exceeds anything the label distribution can plausibly deliver. Such a run is
 reported as **untestable**, not as a result, and does not consume an attempt
 only if it is aborted before the outer test windows are scored.
 
+### 0.2i-AMEND Amendments A, B, C — approved 2026-09-15, BEFORE attempt 2
+
+Ruled on after attempt 1 returned **UNTESTABLE**. There was no favourable or
+unfavourable result to react to: the run could not have produced an answer at
+any underlying edge, so these are corrections to a broken procedure, not
+adjustments made after seeing a number.
+
+**A — the coverage floor binds on SELECTION, not only on reporting.** 0.2i's
+20% floor was written as a reporting rule and never wired into 0.2j. The
+threshold selector had only a `min_take = 30` guard, which on ~10,000-row inner
+folds is 0.3% and no constraint at all; it degenerated to the most extreme
+threshold available and produced inner expectancies of +3.38 ATR per trade,
+which nothing on this label set earns.
+
+**B — select a COVERAGE QUANTILE, not an absolute probability.** An absolute
+threshold read off one model's prediction distribution and applied to a
+differently-fitted model's is a calibration error regardless of outcome. The
+grid is over take-fraction `q`, and **every point in the grid sits at or above
+the 20% floor**, so selection cannot drive coverage below it:
+
+```
+q ∈ {0.20, 0.25, 0.30, 0.40, 0.50, 0.70, 1.00}
+```
+
+Within that grid, selection is on inner-fold uniqueness-weighted expectancy,
+exactly as 0.2j already specifies. Nothing else about the objective changes.
+
+The probability cutoff `τ` is then read off the **pooled inner out-of-fold
+prediction distribution of the selected configuration** — training data only,
+out-of-sample within the training window. It is NOT read off the test
+distribution: taking a quantile of test-period predictions would make bar *i*'s
+decision depend on predictions at later test bars, which is lookahead even
+though no label is touched.
+
+A residual calibration gap remains, between models fitted on ¾ of the training
+window and the final model fitted on all of it. Its direction is known and is
+the safe one: the inner models see less data, are less confident, and so place
+`τ` lower, which errs toward **more** coverage than `q`. Against a floor, that
+is the correct side to err on.
+
+**C — PRE-FLIGHT COVERAGE GATE.** 0.2i already exempts a run aborted before
+outer scoring; that exemption is now wired in. After selection, projected
+combined coverage is computed on the inner out-of-fold predictions under the
+dual-fire rule. **If the projection falls below 20%, the fold aborts before the
+outer test window is scored, and the attempt is NOT consumed.** Two attempts
+remain and none may be spent on a configuration that could not have produced an
+answer.
+
+The gate reads features and predictions only. No outer-window label is touched,
+so it cannot leak.
+
+### 0.2i-NOTE Winner exit-reason anomaly — recorded 2026-09-15, before attempt 2
+
+Attempt 1's winner mix is anomalous in a specific, pre-statable way.
+
+A **neutral** selection — one with no directional skill — inherits the label
+set's own winner composition. Measured on the 112,615 masked labels
+(44.01% of long labels win):
+
+| exit reason | labels | winners | % of all winners | win rate |
+|---|---:|---:|---:|---:|
+| target | 22,920 | 22,920 | **46.24%** | 100.0% |
+| stop | 44,846 | 0 | 0.00% | 0.0% |
+| time | 17,599 | 12,074 | 24.36% | 68.6% |
+| rollover | 27,250 | 14,570 | 29.40% | 53.5% |
+
+**A neutral selection should therefore produce ~46% target among its winners.**
+
+Attempt 1 produced 21.3% (f0), 11.3% (f1), 7.1% (f2), 14.4% (f3), with rollover
+running 44.6% to 92.9%. The model is selecting **small truncated drifts, not
+the directional moves the 4.0/6.0 geometry was built to capture.**
+
+**At 1.6% coverage this is not interpretable** and is recorded as a hypothesis,
+not a finding.
+
+**If attempt 2 reproduces it at coverage above the floor, it is a finding about
+HORIZON MISMATCH** — the signal, if any, lives on a shorter horizon than the
+barriers are sized for — **and it is RECORDED AS SUCH. It is not acted on by
+changing the geometry**, which stays pre-registered at 4.0/6.0 under 0.2h. An
+edge that appears only after the geometry is reshaped to fit a diagnostic is
+the overfitting 0.2h exists to prevent.
+
 ### 0.2i-LOG Attempt log
 
 | attempt | date | configuration | verdict | E_excess | coverage |
