@@ -135,7 +135,7 @@ def main() -> int:
     al_pooled = weighted_mean(net["long"][te14], u[te14])
 
     P("=" * 78)
-    P("ATTEMPT 1 OF 3 -- PRE-REGISTERED WALK-FORWARD (0.2i)")
+    P("ATTEMPT 2 OF 3 -- PRE-REGISTERED WALK-FORWARD (0.2i + amendments A/B/C)")
     P("=" * 78)
     P(f"barriers {lc['stop_atr']}/{lc['target_atr']} ATR   features {len(names)}   "
       f"blocks {nb} -> folds {len(folds0)}   embargo {wf['embargo_bars']}")
@@ -148,7 +148,25 @@ def main() -> int:
                                 target_atr=lc["target_atr"], **kw)
 
     print("running headline...", file=sys.stderr)
-    res = run("headline")
+    res, aborted = run("headline")
+    if aborted:
+        P("\n" + "=" * 78)
+        P("AMENDMENT C -- PRE-FLIGHT COVERAGE GATE FIRED")
+        P("=" * 78)
+        for a in aborted:
+            P(f"  fold {a.index}: projected coverage {a.projected_coverage:.1%} "
+              f"< floor {a.floor:.0%}   ABORTED BEFORE OUTER SCORING")
+            for sd, d in a.detail.items():
+                P(f"     {sd:<5} q {d['q']:.2f}  tau {d['tau']:.4f}  "
+                  f"lambda_l2 {d['lam']:g}  k {d['k']}")
+        P("  0.2i: a run aborted before outer scoring does NOT consume an attempt.")
+    if not res:
+        P("\n  VERDICT: ABORTED -- no outer window was scored. Attempt NOT consumed.")
+        txt = "\n".join(L) + "\n"
+        OUT.mkdir(parents=True, exist_ok=True)
+        (OUT / "walkforward_attempt2.txt").write_text(txt)
+        print(txt)
+        return 0
 
     # ---------------- C.6 per-fold block ----------------
     P("\n" + "=" * 78)
@@ -173,10 +191,12 @@ def main() -> int:
         P(f"  NET   {e:+.4f} ATR      GROSS {gr:+.4f} ATR      "
           f"always-long {al[f.index]:+.4f}")
         P(f"  E_excess {e - al[f.index]:+.4f} ATR")
+        P(f"  pre-flight projected coverage {f.projected_coverage:.1%} "
+          f"(floor {wfc.coverage_floor:.0%})")
         for s, sr in f.sides.items():
-            P(f"  {s:<5} thr {sr.threshold:.4f}  breakeven {sr.breakeven:.4f}  "
-              f"lambda_l2 {sr.lam:g}  k {sr.n_features}  "
-              f"inner E {sr.inner_expectancy:+.4f}")
+            P(f"  {s:<5} q {sr.take_fraction:.2f}  tau {sr.threshold:.4f}  "
+              f"breakeven {sr.breakeven:.4f}  lambda_l2 {sr.lam:g}  "
+              f"k {sr.n_features}  inner E {sr.inner_expectancy:+.4f}")
         if m.any():
             win = m & (f.net > 0)
             P(f"  win rate {win.sum()/m.sum():.2%}  "
@@ -186,6 +206,8 @@ def main() -> int:
                    for k in (1, -1, 0, 2)}
             P("  WINNER exit-reason mix: " + "  ".join(
                 f"{k} {v:,} ({100*v/tot:.1f}%)" for k, v in mix.items()))
+            P(f"  {'':<22} neutral baseline: target 46.2%  time 24.4%  "
+              f"rollover 29.4%   (0.2i-NOTE)")
             lm = m & (f.taken_side == 1)
             P(f"  side split: long {int(lm.sum()):,}  short {int((m&(f.taken_side==-1)).sum()):,}")
 
@@ -231,7 +253,7 @@ def main() -> int:
     P("=" * 78)
 
     print("guard 1: shuffled labels...", file=sys.stderr)
-    sh = run("shuffle", shuffle_train=True)
+    sh, _ = run("shuffle", shuffle_train=True)
     ps = pool(sh)
     pooled_label = weighted_mean(
         np.concatenate([net["long"][te14], net["short"][te14]]),
@@ -244,7 +266,7 @@ def main() -> int:
       f"{'CLEAN' if ps['e'] - al_pooled < 0.10 else 'INVESTIGATE'}")
 
     print("guard 2: time-of-day ablation...", file=sys.stderr)
-    ab = run("ablate", drop=SESSION_FEATS)
+    ab, _ = run("ablate", drop=SESSION_FEATS)
     pa_ = pool(ab)
     P(f"\n2. TIME-OF-DAY ABLATION ({len(SESSION_FEATS)} session features dropped)")
     P(f"   Wnet {pa_['e']:+.4f}   E_excess {pa_['e']-al_pooled:+.4f}   "
@@ -275,8 +297,8 @@ def main() -> int:
                              embargo_bars=int(wf["embargo_bars"]))
         t2 = np.concatenate([f.test[l2[f.test]] for f in f0 if f.index >= 1])
         al2 = weighted_mean(n2["long"][t2], u2[t2])
-        r = run_walk_forward(X, names, n2, g2, r2, u2, e2, cost, cfg=wfc,
-                             n_blocks=nb, stop_atr=st, target_atr=tg)
+        r, _ = run_walk_forward(X, names, n2, g2, r2, u2, e2, cost, cfg=wfc,
+                                n_blocks=nb, stop_atr=st, target_atr=tg)
         pr = pool(r)
         P(f"   {f'{st:g}/{tg:g}':<12} {pr['e']-al2:>+10.4f} {coverage(r):>10.1%} "
           f"{pr['e']:>+10.4f} {al2:>+10.4f}")
@@ -293,8 +315,8 @@ def main() -> int:
 
     txt = "\n".join(L) + "\n"
     OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / "walkforward_attempt1.txt").write_text(txt)
-    (OUT / "walkforward_attempt1.json").write_text(json.dumps(dict(
+    (OUT / "walkforward_attempt2.txt").write_text(txt)
+    (OUT / "walkforward_attempt2.json").write_text(json.dumps(dict(
         E_excess=E, lower_bound=lb, coverage=cov, wnet=p14["e"],
         always_long=al_pooled, se=p14["se"], eff_n=p14["eff"],
         per_fold=per_fold, conditions=dict(c1=bool(c1), c2=bool(c2),

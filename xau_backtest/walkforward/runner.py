@@ -20,14 +20,20 @@ import numpy.typing as npt
 
 from ..labeling.weights import Fold, expanding_folds
 
-__all__ = ["WalkForwardConfig", "SideResult", "FoldResult", "run_walk_forward",
-           "select_threshold", "inner_folds", "weighted_mean", "weighted_sd"]
+__all__ = ["WalkForwardConfig", "SideResult", "FoldResult", "AbortedFold",
+           "run_walk_forward", "select_take_fraction", "inner_folds",
+           "weighted_mean", "weighted_sd", "Q_GRID"]
 
 F = npt.NDArray[np.float64]
 I = npt.NDArray[np.int64]
 
 LAMBDA_GRID: tuple[float, ...] = (1.0, 10.0, 50.0)
 K_GRID: tuple[int, ...] = (10, 20, 40, 58)
+
+#: Amendment B: the take-fraction grid. EVERY point sits at or above the 0.2i
+#: coverage floor of 0.20, so selection cannot drive coverage below it.
+Q_GRID: tuple[float, ...] = (0.20, 0.25, 0.30, 0.40, 0.50, 0.70, 1.00)
+COVERAGE_FLOOR: float = 0.20
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +46,7 @@ class WalkForwardConfig:
     n_estimators: int = 400
     learning_rate: float = 0.03
     seed: int = 7
+    coverage_floor: float = COVERAGE_FLOOR
 
 
 def weighted_mean(x: F, w: F) -> float:
@@ -71,27 +78,37 @@ def inner_folds(train: I, exit_index: I, *, n_inner: int, embargo_bars: int) -> 
                            embargo_bars=embargo_bars)
 
 
-def select_threshold(p: F, net: F, w: F, *, min_take: int = 30) -> tuple[float, float]:
-    """Threshold maximising uniqueness-weighted expectancy over taken trades.
+def select_take_fraction(p: F, net: F, w: F, *, grid: Sequence[float] = Q_GRID
+                         ) -> tuple[float, float, float]:
+    """Pick the take-fraction `q` maximising uniqueness-weighted expectancy.
 
-    Returns (threshold, expectancy). Candidates are the observed probability
-    quantiles, so the search never depends on an arbitrary grid.
+    Amendment A + B (2026-09-15). Selection is over a COVERAGE QUANTILE, not an
+    absolute probability, and every point of the grid sits at or above the 0.2i
+    floor, so selection cannot drive coverage below it. The previous version
+    searched absolute probability thresholds under only a `min_take = 30`
+    guard, which on a 10,000-row inner fold is 0.3% and no constraint: it
+    degenerated to the most extreme cut available and produced inner
+    expectancies of +3.38 ATR per trade.
+
+    Returns ``(q, tau, expectancy)`` where ``tau`` is the probability cutoff on
+    THIS prediction distribution -- training data only. It is never read off a
+    test distribution: a quantile of test-period predictions would make bar i's
+    decision depend on predictions at later test bars, which is lookahead even
+    though no label is touched.
     """
     if p.size == 0:
-        return 1.0, float("nan")
-    # Candidates span the FULL range, not just the upper half. An earlier
-    # version started at the median, which silently capped coverage at 50%
-    # however broad the edge -- and coverage drives power directly (0.2i).
-    cand = np.unique(np.quantile(p, np.linspace(0.0, 0.995, 100), method="lower"))
-    best_t, best_e = 1.0, -np.inf
-    for t in cand:
-        m = p >= t
-        if m.sum() < min_take:
+        return 1.0, 1.0, float("nan")
+    best = (float("nan"), 1.0, -np.inf)          # q, tau, expectancy
+    for q in grid:
+        tau = float(np.quantile(p, 1.0 - q, method="lower"))
+        m = p >= tau
+        if not m.any():
             continue
         e = weighted_mean(net[m], w[m])
-        if e > best_e:
-            best_t, best_e = float(t), e
-    return best_t, (best_e if np.isfinite(best_e) else float("nan"))
+        if np.isfinite(e) and e > best[2]:
+            best = (float(q), tau, e)
+    q, tau, e = best
+    return q, tau, (e if np.isfinite(e) else float("nan"))
 
 
 def _params(cfg: WalkForwardConfig, lam: float, min_child: int) -> dict:
@@ -132,12 +149,26 @@ def _permutation_importance(model, X: F, y: npt.NDArray[np.int8], w: F,
 class SideResult:
     side: str
     threshold: float
+    take_fraction: float
     breakeven: float
     lam: float
     k: int
     n_features: int
     inner_expectancy: float
     prob: F = field(repr=False, default=None)
+
+
+@dataclass(frozen=True, slots=True)
+class AbortedFold:
+    """Amendment C: a fold stopped BEFORE its outer window was scored.
+
+    0.2i exempts such a run from the attempt count. No outer label was read.
+    """
+
+    index: int
+    projected_coverage: float
+    floor: float
+    detail: dict
 
 
 @dataclass
@@ -158,6 +189,7 @@ class FoldResult:
     w: F = field(repr=False, default=None)
     dual_fire: int = 0
     reason: npt.NDArray[np.int32] = field(repr=False, default=None)
+    projected_coverage: float = float("nan")
 
 
 def run_walk_forward(
@@ -166,8 +198,13 @@ def run_walk_forward(
     cost: F, *, cfg: WalkForwardConfig, n_blocks: int,
     stop_atr: float, target_atr: float,
     shuffle_train: bool = False, drop: Iterable[str] = (),
-) -> list[FoldResult]:
-    """One full walk-forward pass. `drop` names features to ablate."""
+) -> tuple[list[FoldResult], list[AbortedFold]]:
+    """One full walk-forward pass.
+
+    Returns ``(scored_folds, aborted_folds)``. A fold reaching the pre-flight
+    coverage gate below the floor is aborted BEFORE its outer window is read,
+    which is what makes it exempt from the 0.2i attempt count.
+    """
     keep = np.array([i for i, c in enumerate(names) if c not in set(drop)])
     names = [names[i] for i in keep]
     X = X[:, keep]
@@ -176,6 +213,7 @@ def run_walk_forward(
     folds = expanding_folds(ex, n_blocks=n_blocks, embargo_bars=cfg.embargo_bars)
     rng = np.random.default_rng(cfg.seed)
     out: list[FoldResult] = []
+    aborted: list[AbortedFold] = []
 
     for f in folds:
         tr = f.train[live[f.train]]
@@ -186,6 +224,8 @@ def run_walk_forward(
         inner = inner_folds(tr, ex, n_inner=cfg.n_inner, embargo_bars=cfg.embargo_bars)
 
         sides: dict[str, SideResult] = {}
+        oof: dict[str, F] = {}
+        oof_rows: npt.NDArray[np.int64] | None = None
         for side in ("long", "short"):
             y_all = (net[side] > 0).astype(np.int8)
             y_tr = y_all[tr].copy()
@@ -204,12 +244,12 @@ def run_walk_forward(
                                                net[side][b], rng)
             order = np.argsort(-imp)
 
-            # --- grid on inner folds: lambda_l2 x k ---
-            best = (-np.inf, 1.0, 10.0, len(names))
+            # --- grid on inner folds: k x lambda_l2 x take-fraction q ---
+            best = (-np.inf, np.nan, 1.0, 10.0, len(names), None, None)
             for k in K_GRID:
                 cols = order[:min(k, len(names))]
                 for lam in LAMBDA_GRID:
-                    ps, ns, ws = [], [], []
+                    ps, ns, ws, rows = [], [], [], []
                     for g in inner:
                         a, b = tr[g.train], tr[g.test]
                         if a.size < 200 or b.size < 100:
@@ -217,23 +257,41 @@ def run_walk_forward(
                         m = _fit(X[np.ix_(a, cols)], y_tr[g.train], w[a],
                                  _params(cfg, lam, min_child), cfg.n_estimators)
                         ps.append(m.predict(X[np.ix_(b, cols)]))
-                        ns.append(net[side][b]); ws.append(w[b])
+                        ns.append(net[side][b]); ws.append(w[b]); rows.append(b)
                     if not ps:
                         continue
-                    p = np.concatenate(ps); nn = np.concatenate(ns); ww = np.concatenate(ws)
-                    t, e = select_threshold(p, nn, ww)
+                    p = np.concatenate(ps); nn = np.concatenate(ns)
+                    ww = np.concatenate(ws); rr = np.concatenate(rows)
+                    q, tau, e = select_take_fraction(p, nn, ww)
                     if np.isfinite(e) and e > best[0]:
-                        best = (e, t, lam, k)
-            inner_e, thr, lam, k = best
+                        best = (e, q, tau, lam, k, p, rr)
+            inner_e, q, thr, lam, k, p_oof, rows = best
             cols = order[:min(k, len(names))]
             model = _fit(X[np.ix_(tr, cols)], y_tr, w[tr],
                          _params(cfg, lam, min_child), cfg.n_estimators)
-            prob = model.predict(X[np.ix_(te, cols)])
             sides[side] = SideResult(
-                side=side, threshold=thr,
+                side=side, threshold=float(thr), take_fraction=float(q),
                 breakeven=(stop_atr + c_fold) / (stop_atr + target_atr),
                 lam=lam, k=int(k), n_features=int(cols.size),
-                inner_expectancy=float(inner_e), prob=prob)
+                inner_expectancy=float(inner_e),
+                prob=model.predict(X[np.ix_(te, cols)]))
+            oof[side] = p_oof if p_oof is not None else np.zeros(0)
+            oof_rows = rows if oof_rows is None else oof_rows
+
+        # --- Amendment C: PRE-FLIGHT COVERAGE GATE, before any outer score ---
+        proj = float("nan")
+        if oof["long"].size and oof["short"].size == oof["long"].size:
+            il = oof["long"] >= sides["long"].threshold
+            ish = oof["short"] >= sides["short"].threshold
+            proj = float((il ^ ish).mean())      # dual fire -> take neither
+        if np.isfinite(proj) and proj < cfg.coverage_floor:
+            aborted.append(AbortedFold(
+                index=f.index, projected_coverage=proj,
+                floor=cfg.coverage_floor,
+                detail={s: dict(q=v.take_fraction, tau=v.threshold,
+                                lam=v.lam, k=v.n_features)
+                        for s, v in sides.items()}))
+            continue                              # outer window NEVER scored
 
         fl = sides["long"].prob >= sides["long"].threshold
         fs = sides["short"].prob >= sides["short"].threshold
@@ -251,5 +309,5 @@ def run_walk_forward(
             train_eff=tr_eff, test_eff=te_eff, purged=f.purged,
             embargoed=f.embargoed, cost_atr=c_fold, sides=sides,
             taken=taken, taken_side=tside, net=n, gross=g, w=w[te],
-            dual_fire=dual, reason=r))
-    return out
+            dual_fire=dual, reason=r, projected_coverage=proj))
+    return out, aborted
