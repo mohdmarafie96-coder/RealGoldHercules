@@ -193,6 +193,136 @@ HOW TO READ A FAIL (0.2i)
   floor fails this test more often than it passes.
 
 ================================================================================
+DECOMPOSITION -- added 2026-09-15. RE-READ OF THIS RUN, NO ATTEMPT CONSUMED.
+================================================================================
+
+  The trade-level arrays were not persisted by scripts_walkforward.py -- an
+  instrumentation gap on my part. scripts_decompose.py re-executes the same
+  deterministic passes and ASSERTS bit-identical reproduction of the headline
+  before reporting anything:
+
+    E_excess   0.17577691 = 0.17577691      wnet   0.21561158 = 0.21561158
+    coverage   0.37510490 = 0.37510490      SE     0.11002127 = 0.11002127
+    eff n    1164.96127086 = 1164.96127086
+
+  All MATCH. Nothing below is a new experiment.
+
+  (The gate fired once on first use, on my own bug: the decompose script
+  subtracted the ROUNDED always-long constant 0.0398 where attempt 2 subtracted
+  the computed 0.039834667, shifting E_excess by 3.5e-5. Model output was
+  identical throughout. The gate caught exactly what it was built to catch.)
+
+--------------------------------------------------------------------------------
+D1. FOLD-4 CONCENTRATION -- CONFIRMED. THIS IS THE HEADLINE FINDING.
+--------------------------------------------------------------------------------
+
+  fold    eff n      Wnet        AL   E_excess  contribution       SE
+     1    212.4   -0.1003   -0.2350    +0.1347        +28.61   0.2565
+     2    212.6   +0.4050   +0.2161    +0.1888        +40.15   0.2516
+     3    320.0   +0.0014   +0.2221    -0.2207        -70.62   0.2081
+     4    419.9   +0.4427   -0.0425    +0.4852       +203.75   0.1859
+   ALL   1165.0   +0.2156   +0.0398    +0.1758       +201.89   0.1100
+
+  FOLDS 1-3 CONTRIBUTE -1.87 OF A TOTAL +201.89.
+  FOLD 4 CONTRIBUTES 100.9% OF THE RESULT.
+
+  Two defensible definitions of "E_excess over folds 1-3", and they differ:
+
+    A. eff-n-weighted mean of the per-fold excesses     -0.0025  (-0.018 sigma)
+    B. pooled Wnet minus pooled always-long             +0.0216  (+0.159 sigma)
+
+  They differ because B pools always-long over ALL test bars by uniqueness
+  while A weights each fold's difference by that fold's TAKEN-trade effective
+  n. Definition A is the one quoted in the ruling and it is confirmed exactly
+  at -0.0025. Under either definition the answer is the same: NIL.
+
+    POOLED, FOLDS 1-3 ONLY
+      Wnet          +0.0876      always-long   +0.0660
+      E_excess      +0.0216      eff n 745.0   sd 3.7178
+      SE             0.1362      lower bound   -0.2682      +0.159 sigma
+
+    FOLD 4 ALONE
+      Wnet          +0.4427      always-long   -0.0425
+      E_excess      +0.4852      eff n 419.9   sd 3.8101
+      SE             0.1859      lower bound   +0.0896      +2.610 sigma
+
+  FOLD 4 ALONE CLEARS CONDITION 1. Its lower bound is +0.0896 > 0 at the same
+  z = 2.128 the headline failed against.
+
+  That is NOT a result and must not be reported as one. Fold 4 was identified
+  as the driving fold by looking at the outcome; testing it in isolation
+  afterwards is selection on the dependent variable. The pre-registered
+  headline pools folds 1-4 and it FAILED. What this decomposition establishes
+  is narrower and more useful: THE HEADLINE IS NOT A BROAD EFFECT THAT NARROWLY
+  MISSED SIGNIFICANCE. It is one fold carrying everything, with nothing
+  underneath it in the other three.
+
+--------------------------------------------------------------------------------
+D3. COST REGIME, PER FOLD -- AND A CORRECTION TO THIS DOCUMENT
+--------------------------------------------------------------------------------
+
+  fold    cost c      Wnet        AL   E_excess       SE
+     1    0.2356   -0.1003   -0.2350    +0.1347   0.2565
+     2    0.1923   +0.4050   +0.2161    +0.1888   0.2516
+     3    0.1666   +0.0014   +0.2221    -0.2207   0.2081
+     4    0.0888   +0.4427   -0.0425    +0.4852   0.1859
+
+  CORRECTION. Section 4 of this document called the cost split "the cleanest
+  positive result in the run" on the strength of folds 1-2 at +0.1618 against
+  folds 3-4 at +0.1605. THAT APPEARANCE OF STABILITY WAS AN ARTIFACT OF THE
+  GROUPING. It averaged fold 3, the one dissenting fold, with fold 4, the one
+  driving fold, and the two nearly cancelled into a number that happened to sit
+  beside the folds 1-2 average.
+
+  Per fold, cost order and excess order do not line up. Cost ascends 4, 3, 2, 1;
+  excess ascends 3, 1, 2, 4. Spearman rho = -0.400 on four points, which
+  supports no inference whatever.
+
+  The defensible statement is NOT "the edge is stable across cost regimes". It
+  is: with four folds at per-fold SE near 0.21-0.26, THIS DESIGN CANNOT SPEAK TO
+  COST DEPENDENCE IN EITHER DIRECTION. The earlier claim is withdrawn.
+
+--------------------------------------------------------------------------------
+D4. GUARDS, PER FOLD
+--------------------------------------------------------------------------------
+
+  fold |  headline    cov |   ablated    cov     delta |  shuffled    cov
+     0 |   +0.1149  23.1% |   +0.1231  57.8%   +0.0082 |   +0.1833  25.3%
+     1 |   +0.1347  25.4% |   -0.0014  43.3%   -0.1362 |   -0.0694  35.2%
+     2 |   +0.1888  24.8% |   -0.0718  27.3%   -0.2606 |   -0.0981  43.4%
+     3 |   -0.2207  41.9% |   -0.1511  36.0%   +0.0696 |   -0.1577  49.0%
+     4 |   +0.4852  57.9% |   +0.3788  69.4%   -0.1064 |   +0.0398  35.7%
+   1-4 |   +0.1758  37.5% |   +0.0611  44.0%   -0.1147 |   -0.0544  40.8%
+
+  ABLATION: THE SESSION-FEATURE DELTA IS NOT CONCENTRATED IN FOLD 4.
+
+    folds 1-3   +0.0216  ->  -0.1023     delta  -0.1239
+    fold 4      +0.4852  ->  +0.3788     delta  -0.1064
+
+  The two are almost equal in magnitude. Per fold the dependence is spread and
+  is largest in fold 2 (-0.2606), not fold 4 (-0.1064). Fold 3 moves the other
+  way (+0.0696).
+
+  The consequence matters more than the spread. AFTER ABLATION, FOLDS 1-3 GO
+  NEGATIVE (-0.1023) WHILE FOLD 4 REMAINS STRONGLY POSITIVE (+0.3788). Taken
+  with D1: the small positive in folds 1-3 does not survive removing the clock
+  features, and everything that does survive is fold 4.
+
+  SHUFFLED CONTROL, per fold. Pooled it is -0.0544 against the headline's
+  +0.1758, and the per-fold view shows how noisy that comparison is:
+
+    fold 0 shuffled +0.1833 is HIGHER than fold 0 headline +0.1149. At 25.3%
+    coverage fold 0's shuffled effective n is about 181, giving SE near 0.28,
+    so +0.1833 is roughly 0.65 sigma -- noise, and a useful calibration of how
+    large a per-fold number can be while meaning nothing.
+
+    Fold 4 shuffled is +0.0398 against its headline +0.4852, the largest real-
+    minus-shuffled gap of any fold. Folds 1, 2 and 3 shuffled are all negative.
+
+  The control still says what it said: THE PIPELINE DOES NOT LEAK. It now also
+  says the real-versus-shuffled separation is itself concentrated in fold 4.
+
+================================================================================
 HOW TO READ THIS
 ================================================================================
 

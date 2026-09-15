@@ -569,6 +569,68 @@ changing the geometry**, which stays pre-registered at 4.0/6.0 under 0.2h. An
 edge that appears only after the geometry is reshaped to fit a diagnostic is
 the overfitting 0.2h exists to prevent.
 
+### 0.2i-DEFECT Condition 3 counts signs, not magnitudes — recorded 2026-09-15
+
+**Recorded as a defect. The condition is NOT amended: it was pre-registered and
+attempt 2 was scored against it as written.**
+
+Condition 3 asks for at least 3 of 4 folds positive. Attempt 2 satisfied it:
+
+```
+f1 +0.1347   f2 +0.1888   f3 −0.2207   f4 +0.4852     →  3 of 4 positive, PASS
+```
+
+But sign-counting is blind to magnitude. Weighted by effective n, the two small
+positives (+28.61 and +40.15) are outweighed by the single larger negative
+(−70.62), so **the excess outside fold 4 is −0.0025 ATR — nil — while condition
+3 reported PASS.** A condition intended to detect "the edge is broad rather than
+one lucky window" passed on a run where one fold supplied 100.9% of the result.
+
+The defect is structural, not specific to this run: any condition on the sign
+vector alone can be satisfied by many small positives and one large negative,
+which is precisely the concentration pattern it exists to catch.
+
+What would have caught it, for whoever designs the next pre-registration: a
+condition on the **excess with the largest-contributing fold removed**, or on
+the eff-n-weighted excess of the remaining folds. Neither is adopted now.
+Amending a condition after seeing the run it failed to catch is how
+pre-registration stops meaning anything, and condition 3's PASS did not change
+attempt 2's verdict in any case — condition 1 failed and the run is a FAIL.
+
+### 0.2L Expanding walk-forward does NOT isolate time-of-day — recorded 2026-09-15
+
+**A limitation of the design, recorded for the record.**
+
+Expanding walk-forward isolates **regime** because train and test are disjoint
+in time and volatility regimes cluster in time (0.2a). It does **not** isolate
+**time of day**, and the reason is structural:
+
+> Every training window and every test window contains all **96 daily M15
+> slots**. A persistent spurious clock pattern is therefore present on both
+> sides of every split, in every fold.
+
+Such a pattern would appear as genuine out-of-sample edge in **every** fold, and
+would do so no matter how many folds were added or how long the history ran.
+Purging and the 96-bar embargo do not help: they remove temporal *adjacency*,
+not the repeated daily cycle, which recurs on both sides of any cut that is made
+along the time axis.
+
+Consequences:
+
+1. **No result from this design can distinguish a real intraday effect from a
+   persistent spurious one.** The walk-forward machinery is silent on the
+   question by construction.
+2. **The time-of-day ablation is the only evidence available**, which raises its
+   weight considerably. On attempt 2 it took pooled E_excess from +0.1758 to
+   +0.0611, and folds 1–3 from +0.0216 to −0.1023.
+3. Testing the question properly would need a **different split axis** — holding
+   out slots rather than dates, e.g. train on some times of day and test on
+   others. That is a different experiment, not a fold count, and it is not
+   proposed here.
+
+This limitation applies to every result produced under 0.2a, attempts 1 and 2
+included, and should be carried forward to any successor design.
+
 ### 0.2i-LOG Attempt log
 
 | attempt | date | configuration | verdict | E_excess | coverage | eff n |
@@ -592,7 +654,19 @@ Largest qualification on the headline: the time-of-day ablation takes E_excess
 from +0.1758 to +0.0611, so roughly 65% of the measured excess rides on the
 eight session and clock features. Both arms are above the coverage floor, so
 the comparison is readable; the delta is of order one SE, so it is suggestive
-rather than conclusive.
+rather than conclusive. Per 0.2L this ablation is the ONLY evidence the design
+can offer on time-of-day, which raises its weight.
+
+**Decomposition (2026-09-15, a re-read of attempt 2 consuming no attempt).**
+Fold 4 contributes **100.9%** of the result. Folds 1–3 pooled give E_excess
+−0.0025 (eff-n-weighted per-fold) or +0.0216 (pooled), against SE 0.1362 —
+nil either way. Fold 4 alone is +0.4852 at SE 0.1859, 2.610σ, which would clear
+condition 1 on its own; that is selection on the dependent variable and is not
+a result. After ablation folds 1–3 go negative (−0.1023) while fold 4 stays
+positive (+0.3788). The two-group cost split reported at the time is
+**withdrawn**: it averaged the dissenting fold with the driving fold, and per
+fold the cost and excess orderings do not line up (Spearman −0.400 on four
+points). Full tables in `docs/WALKFORWARD_ATTEMPT2.txt`.
 
 **Attempt 1 is consumed.** Coverage 1.6% against the 20% floor; pooled
 effective n 67.9 against the 573 the floor requires. Full report in
